@@ -103,7 +103,7 @@ void *slaveThread(void *arg0)
      * Below we set Board_SPI_MASTER_READY & Board_SPI_SLAVE_READY initial
      * conditions for the 'handshake'.
      */
-    GPIO_setConfig(Board_SPI_SLAVE_READY, GPIO_CFG_OUTPUT | GPIO_CFG_OUT_LOW);
+    GPIO_setConfig(Board_SPI_SLAVE_READY, GPIO_CFG_OUTPUT | GPIO_CFG_OUT_HIGH);
     GPIO_setConfig(Board_SPI_MASTER_READY, GPIO_CFG_INPUT);
 
     /*
@@ -145,7 +145,7 @@ void *slaveThread(void *arg0)
      * configure the transfer & then set Board_SPI_SLAVE_READY high.
      */
     SPI_Params_init(&spiParams);
-    spiParams.frameFormat = SPI_POL0_PHA0;
+    spiParams.frameFormat = SPI_POL0_PHA1;
     spiParams.mode = SPI_SLAVE;
     spiParams.transferCallbackFxn = transferCompleteFxn;
     spiParams.transferMode = SPI_MODE_CALLBACK;
@@ -171,6 +171,8 @@ void *slaveThread(void *arg0)
         transaction.txBuf = (void *) txBuffer.raw;
         transaction.rxBuf = (void *) rxBuffer.raw;
 
+        /* Toggle on user LED, indicating a SPI transfer is in progress */
+
 
         /*
          * Setup SPI transfer; Board_SPI_SLAVE_READY will be set to notify
@@ -180,8 +182,7 @@ void *slaveThread(void *arg0)
         if (transferOK)
         {
             GPIO_write(Board_SPI_SLAVE_READY, 0);
-
-            /* Wait until transfer has completed */
+           /* Wait until transfer has completed */
             sem_wait(&slaveSem);
 
             /*
@@ -198,10 +199,6 @@ void *slaveThread(void *arg0)
                 else if (rxBuffer.frame.cmd == 0x82)
                 {
                     NodeTask_stopAutoTransfer();
-                }
-                else if (rxBuffer.frame.cmd == 0x83)
-                {
-                    NodeTask_sleep();
                 }
                 else if (rxBuffer.frame.cmd == 0x01)
                 {
@@ -239,7 +236,6 @@ bool SPI_isValidFrame(SPI_Frame* frame)
 {
     if (frame->len > 60)
     {
-        Trace_printf(hDisplaySerial, "Invalid length![%02x, %d, %04x]\n", frame->cmd, frame->len, frame->crc);
         return  false;
     }
 

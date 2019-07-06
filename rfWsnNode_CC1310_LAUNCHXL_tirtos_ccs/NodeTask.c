@@ -44,7 +44,6 @@
 
 /* TI-RTOS Header files */ 
 #include <ti/drivers/PIN.h>
-#include <ti/drivers/GPIO.h>
 #include <ti/display/Display.h>
 #include <ti/display/DisplayExt.h>
 
@@ -75,10 +74,9 @@
 #define NODE_EVENT_DATA_ON              (uint32_t)(1 << 7)
 #define NODE_EVENT_WAKEUP               (uint32_t)(1 << 8)
 #define NODE_EVENT_SLEEP                (uint32_t)(1 << 9)
-#define NODE_EVENT_MOTION_DETECTED      (uint32_t)(1 << 10)
 
-#define NODE_ACTIVITY_LED           Board_PIN_LED0
-#define NODE_MESSAGE_QUEUE_FULL_LED Board_PIN_LED1
+//#define NODE_ACTIVITY_LED           Board_PIN_LED0
+//#define NODE_MESSAGE_QUEUE_FULL_LED Board_PIN_LED1
 
 
 /***** Variable declarations *****/
@@ -97,10 +95,11 @@ Clock_Struct messageTimeoutClock;     /* not static so you can see in ROV */
 static Clock_Handle messageTimeoutClockHandle;
 
 /* Clock for the motion detection timeout */
-Clock_Struct motionDetectionTimeoutClock;     /* not static so you can see in ROV */
-static Clock_Handle motionDetectionTimeoutClockHandle;
+//Clock_Struct motionDetectionTimeoutClock;     /* not static so you can see in ROV */
+//static Clock_Handle motionDetectionTimeoutClockHandle;
 
 /* Pin driver handle */
+#if 0
 static PIN_Handle ledPinHandle;
 static PIN_State ledPinState;
 PIN_Config ledPinTable[] =
@@ -112,6 +111,19 @@ PIN_Config ledPinTable[] =
     PIN_TERMINATE
 };
 
+/*
+ * Application button pin configuration table:
+ *   - Buttons interrupts are configured to trigger on falling edge.
+ */
+static PIN_Handle buttonPinHandle;
+static PIN_State buttonPinState;
+PIN_Config buttonPinTable[] =
+{
+//    Board_PIN_BUTTON0  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE,
+//    Board_PIN_BUTTON1  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE,
+    PIN_TERMINATE
+};
+#endif
 /* Display driver handles */
 Display_Handle hDisplaySerial;
 
@@ -147,10 +159,7 @@ static  uint32_t    totalTransferDataSize = 0;
 
 static  uint32_t    previousTransferTime = 0;
 
-static  Clock_Params    motionDetectedNotificationClockParams;
-static  uint32_t    motionDetectedNotificationTryCount = 0;
-static  uint32_t    motionDetectedNotificationMaxCount = 10;
-static  uint32_t    motionDetectedNotificationPeriod = 10000;
+static  uint32_t    transferPeriod = 1;
 static  uint32_t    messageGenerationOverrunSleep = 200;
 
 static  bool        overrun = false;
@@ -163,10 +172,8 @@ static void transferTimeoutCallback(UArg arg0);
 static void messageTimeoutCallback(UArg arg0);
 static void motionDetectionTimeoutCallback(UArg arg0);
 
-static void NodeTask_motionDetectFinishedCallback(PIN_Handle handle, PIN_Id pinId);
+static void buttonCallback(PIN_Handle handle, PIN_Id pinId);
 
-
-void NodeTask_notificationEvent(uint8_t eventType);
 
 /***** Function definitions *****/
 void NodeTask_init(void)
@@ -181,19 +188,19 @@ void NodeTask_init(void)
     nodeEventHandle = Event_handle(&nodeEvent);
 
     /* Create clock object which is used for fast report timeout */
+    Clock_Params clkParams;
+    Clock_Params_init(&clkParams);
 
+    clkParams.period = 0;
+    clkParams.startFlag = FALSE;
 //    Clock_construct(&transferTimeoutClock, transferTimeoutCallback, 1, &clkParams);
 //    transferTimeoutClockHandle = Clock_handle(&transferTimeoutClock);
 
 //    Clock_construct(&messageTimeoutClock, messageTimeoutCallback, 1, &clkParams);
 //    messageTimeoutClockHandle = Clock_handle(&messageTimeoutClock);
 
-    Clock_Params_init(&motionDetectedNotificationClockParams);
-    motionDetectedNotificationClockParams.period = motionDetectedNotificationPeriod;
-    motionDetectedNotificationClockParams.startFlag = FALSE;
-
-    Clock_construct(&motionDetectionTimeoutClock, motionDetectionTimeoutCallback, 0, &motionDetectedNotificationClockParams);
-    motionDetectionTimeoutClockHandle = Clock_handle(&motionDetectionTimeoutClock);
+//    Clock_construct(&motionDetectionTimeoutClock, motionDetectionTimeoutCallback, 0, &clkParams);
+//    motionDetectionTimeoutClockHandle = Clock_handle(&motionDetectionTimeoutClock);
 
     /* Create the node task */
     Task_Params_init(&nodeTaskParams);
@@ -226,7 +233,7 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
     {
         Trace_printf(hDisplaySerial, "Waiting for SCE ADC reading...");
     }
-
+#if 0
     /* Open LED pins */
     ledPinHandle = PIN_open(&ledPinState, ledPinTable);
     if (!ledPinHandle)
@@ -237,9 +244,23 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
     /* setup timeout for fast report timeout */
 //    Clock_setPeriod(transferTimeoutClockHandle, msToClock(transferPeriod));
 //    Clock_setPeriod(messageTimeoutClockHandle, msToClock(testConfigs[configIndex].period));
-    Clock_setPeriod(motionDetectionTimeoutClockHandle, msToClock(motionDetectedNotificationPeriod));
+//    Clock_setPeriod(motionDetectionTimeoutClockHandle, msToClock(30000));
 
-    MPU6050_init();
+
+    buttonPinHandle = PIN_open(&buttonPinState, buttonPinTable);
+    if (!buttonPinHandle)
+    {
+        System_abort("Error initializing button pins\n");
+    }
+
+    /* Setup callback for button pins */
+    if (PIN_registerIntCb(buttonPinHandle, &buttonCallback) != 0)
+    {
+        System_abort("Error registering button callback function");
+    }
+#endif
+
+//    Clock_start(motionDetectionTimeoutClockHandle);
 
     while (1)
     {
@@ -271,8 +292,10 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
             uint32_t    currentTransferTime;
             /* Toggle activity LED */
 
+#if 0
 #if !defined Board_CC1350STK
             PIN_setOutputValue(ledPinHandle, NODE_ACTIVITY_LED,!PIN_getOutputValue(NODE_ACTIVITY_LED));
+#endif
 #endif
             currentTransferTime = (Clock_getTicks() * Clock_tickPeriod) / 1000000;
 
@@ -306,10 +329,11 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
             {
                 uint32_t    currentTransferTime;
 
+#if 0
                 #if !defined Board_CC1350STK
                             PIN_setOutputValue(ledPinHandle, NODE_ACTIVITY_LED,!PIN_getOutputValue(NODE_ACTIVITY_LED));
                 #endif
-
+#endif
                 uint32_t    length = 0;
                 if (DataQ_front(rawData, sizeof(rawData), &length))
                 {
@@ -320,9 +344,11 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
 
                     currentTransferTime = (Clock_getTicks() * Clock_tickPeriod) / 1000;
 
+                    DataQ_pop(NULL, 0, &length);
+#if 0
                     if (NodeRadioTask_sendRawData(rawData, length) == NodeRadioStatus_Success)
                     {
-                        DataQ_pop(NULL, 0, &length);
+//                        DataQ_pop(NULL, 0, &length);
                         transferSuccessCount++;
                         totalTransferSuccessCount++;
                     }
@@ -333,6 +359,7 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
                         index = ((uint32_t)rawData[0] << 24) | ((uint32_t)rawData[1] << 16) | ((uint32_t)rawData[2] << 8) | (uint32_t)rawData[3];
                         Display_printf(hDisplaySerial, 0, 0, "Transfer error : %8x", index);
                     }
+#endif
                 }
 
                 if (currentTransferTime / 1000 != previousTransferTime / 1000)
@@ -356,8 +383,10 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         if( events & NODE_EVENT_OVERRUN_DETECTED)
         {
             overrun = true;
+#if 0
 #if !defined Board_CC1350STK
             PIN_setOutputValue(ledPinHandle, NODE_MESSAGE_QUEUE_FULL_LED, 1);
+#endif
 #endif
             if (Clock_isActive(messageTimeoutClockHandle))
             {
@@ -369,8 +398,10 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         else if( events & NODE_EVENT_OVERRUN_RELEASED)
         {
             overrun = false;
+#if 0
 #if !defined Board_CC1350STK
             PIN_setOutputValue(ledPinHandle, NODE_MESSAGE_QUEUE_FULL_LED, 0);
+#endif
 #endif
             if (Clock_isActive(messageTimeoutClockHandle))
             {
@@ -382,36 +413,18 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
 
         if( events & NODE_EVENT_SLEEP)
         {
-            uint32_t    i;
-
-            for(i = 0 ; i < 10 ; i++)
-            {
-                Trace_printf(hDisplaySerial, "Start motion detect[%d]", i);
-                if (MPU6050_startMotionDetect(0.4, false))
-                {
-                    Trace_printf(hDisplaySerial, "Motion detected");
-                    NodeTask_motionDetected();
-                    break;
-                }
-            }
-        }
-
-        if( events & NODE_EVENT_MOTION_DETECTED)
-        {
-            Clock_start(motionDetectionTimeoutClockHandle);
-            motionDetectedNotificationTryCount = 0;
-
-            NodeTask_notificationEvent(NODE_NOTI_MOTION_DETECTED);
+            Trace_printf(hDisplaySerial, "Start motion detect");
+            MPU6050_startMotionDetect();
         }
 
     }
 }
 
 /*
- *  ======== NodeTask_motionDetectFinishedCallback ========
+ *  ======== buttonCallback ========
  *  Pin interrupt Callback function board buttons configured in the pinTable.
  */
-static void NodeTask_motionDetectFinishedCallback(PIN_Handle handle, PIN_Id pinId)
+static void buttonCallback(PIN_Handle handle, PIN_Id pinId)
 {
     /* Debounce logic, only toggle if the button is still pushed (low) */
     CPUdelay(8000*50);
@@ -485,18 +498,9 @@ static void messageTimeoutCallback(UArg arg0)
     }
 }
 
-void motionDetectionTimeoutCallback(UArg arg0)
+static void motionDetectionTimeoutCallback(UArg arg0)
 {
-    motionDetectedNotificationTryCount++;
-
-    if (motionDetectedNotificationTryCount < motionDetectedNotificationMaxCount)
-    {
-        NodeTask_notificationEvent(NODE_NOTI_MOTION_DETECTED);
-    }
-    else
-    {
-        NodeTask_sleep();
-    }
+    Event_post(nodeEventHandle, NODE_EVENT_SLEEP);
 }
 
 void NodeTask_dataOn(void)
@@ -527,30 +531,35 @@ bool NodeTask_dataTransfer(uint8_t* buffer, uint32_t length)
     return  false;
 }
 
-void    NodeTask_sleep(void)
-{
-    Event_post(nodeEventHandle, NODE_EVENT_SLEEP);
-}
-
 void    NodeTask_wakeup(void)
 {
     Event_post(nodeEventHandle, NODE_EVENT_WAKEUP);
 }
 
-void    NodeTask_motionDetected(void)
+void    NodeTask_motionDetected(float value)
 {
-    Trace_printf(hDisplaySerial, "Motion detected!");
-    Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTED);
+    if (value > 0.4)
+    {
+        Trace_printf(hDisplaySerial, "Motion detected!");
+    }
 }
 
-void NodeTask_notificationEvent(uint8_t eventType)
+void    NodeTask_notificationEvent(void)
 {
     //stop fast report
-    uint8_t buffer[] = { 0, 0, 0, 0, 1, 0, 0, 4, 0, 0, 0, 0};
+    static uint8_t buffer[128];
+    uint8_t dataLength = 0;
 
-    memset(&buffer[8], eventType, 4);
+    buffer[dataLength++] = 0;
+    buffer[dataLength++] = 0;
+    buffer[dataLength++] = 0;
+    buffer[dataLength++] = 1;
+    buffer[dataLength++] = 1;   // Port
+    buffer[dataLength++] = 0;   // Option
+    buffer[dataLength++] = 0;   // Count
+    buffer[dataLength++] = 0;   // Size
 
-    if (DataQ_push(buffer, sizeof(buffer)) == true)
+    if (DataQ_push(buffer, dataLength) == true)
     {
         Event_post(nodeEventHandle, NODE_EVENT_TRANSFER);
         if (overrun)
@@ -563,4 +572,3 @@ void NodeTask_notificationEvent(uint8_t eventType)
         Event_post(nodeEventHandle, NODE_EVENT_OVERRUN_DETECTED);
     }
 }
-

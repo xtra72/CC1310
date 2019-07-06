@@ -57,9 +57,6 @@ int main(void)
     Board_initGeneral();
     Display_init();
 
-    /* Peripheral driver init functions. */
-//    I2C_init();
-
     /* Initialize sensor node tasks */
     NodeRadioTask_init();
     NodeTask_init();
