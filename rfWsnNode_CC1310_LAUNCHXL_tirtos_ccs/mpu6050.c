@@ -57,12 +57,11 @@ PIN_Config interruptPinTable[] = {
 
 extern  Display_Handle hDisplaySerial;
 
-static  bool            stop_ = false;
 static  uint8_t         slaveId_ = 0x68;
 static  I2C_Handle      i2c_;
-static  uint8_t         txBuffer[MPU6050_BUFFER_LENGTH_MAX];
-static  uint8_t         rxBuffer[MPU6050_BUFFER_LENGTH_MAX];
-static  I2C_Transaction i2cTransaction;
+static  uint8_t         txBuffer_[MPU6050_BUFFER_LENGTH_MAX];
+static  uint8_t         rxBuffer_[MPU6050_BUFFER_LENGTH_MAX];
+static  I2C_Transaction i2cTransaction_;
 
 bool    MPU6050_write8(uint8_t address, uint8_t value);
 bool    MPU6050_write16(uint8_t address, uint16_t value);
@@ -99,12 +98,12 @@ bool    MPU6050_write8(uint8_t address, uint8_t value)
 
     sem_wait(&lock_);
 
-    ((uint8_t *)i2cTransaction.writeBuf)[0] = address;
-    ((uint8_t *)i2cTransaction.writeBuf)[1] = value;
-    i2cTransaction.writeCount = 2;
-    i2cTransaction.readCount = 0;
+    ((uint8_t *)i2cTransaction_.writeBuf)[0] = address;
+    ((uint8_t *)i2cTransaction_.writeBuf)[1] = value;
+    i2cTransaction_.writeCount = 2;
+    i2cTransaction_.readCount = 0;
 
-    if (!I2C_transfer(i2c_, &i2cTransaction))
+    if (!I2C_transfer(i2c_, &i2cTransaction_))
     {
         sem_post(&lock_);
         Trace_printf(hDisplaySerial, "I2C Bus fault.");
@@ -112,11 +111,11 @@ bool    MPU6050_write8(uint8_t address, uint8_t value)
     }
     else
     {
-        ((uint8_t *)i2cTransaction.writeBuf)[0] = address;
-        i2cTransaction.writeCount = 1;
-        i2cTransaction.readCount = 1;
+        ((uint8_t *)i2cTransaction_.writeBuf)[0] = address;
+        i2cTransaction_.writeCount = 1;
+        i2cTransaction_.readCount = 1;
 
-        if (!I2C_transfer(i2c_, &i2cTransaction))
+        if (!I2C_transfer(i2c_, &i2cTransaction_))
         {
             sem_post(&lock_);
             Trace_printf(hDisplaySerial, "I2C Bus fault.");
@@ -125,9 +124,9 @@ bool    MPU6050_write8(uint8_t address, uint8_t value)
         else
         {
 #if 0
-            Trace_printf(hDisplaySerial, "%02x : %d|%d|%d|%d|%d|%d|%d|%d",  ((uint8_t *)i2cTransaction.readBuf)[0],
-                 (((uint8_t *)i2cTransaction.readBuf)[0] >> 7) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 6) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 5) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 4) & 1,
-                 (((uint8_t *)i2cTransaction.readBuf)[0] >> 3) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 2) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 1) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 0) & 1);
+            Trace_printf(hDisplaySerial, "%02x : %d|%d|%d|%d|%d|%d|%d|%d",  ((uint8_t *)i2cTransaction_.readBuf)[0],
+                 (((uint8_t *)i2cTransaction_.readBuf)[0] >> 7) & 1, (((uint8_t *)i2cTransaction_.readBuf)[0] >> 6) & 1, (((uint8_t *)i2cTransaction_.readBuf)[0] >> 5) & 1, (((uint8_t *)i2cTransaction_.readBuf)[0] >> 4) & 1,
+                 (((uint8_t *)i2cTransaction_.readBuf)[0] >> 3) & 1, (((uint8_t *)i2cTransaction_.readBuf)[0] >> 2) & 1, (((uint8_t *)i2cTransaction_.readBuf)[0] >> 1) & 1, (((uint8_t *)i2cTransaction_.readBuf)[0] >> 0) & 1);
 #endif
         }
     }
@@ -143,18 +142,18 @@ bool    MPU6050_read8(uint8_t address, uint8_t *value)
 
     sem_wait(&lock_);
 
-    ((uint8_t *)i2cTransaction.writeBuf)[0] = address;
-    i2cTransaction.writeCount = 1;
-    i2cTransaction.readCount = 1;
+    ((uint8_t *)i2cTransaction_.writeBuf)[0] = address;
+    i2cTransaction_.writeCount = 1;
+    i2cTransaction_.readCount = 1;
 
-    if (!I2C_transfer(i2c_, &i2cTransaction))
+    if (!I2C_transfer(i2c_, &i2cTransaction_))
     {
         Trace_printf(hDisplaySerial, "I2C Bus fault.");
         ret = false;
     }
     else
     {
-        *value = ((uint8_t *)i2cTransaction.readBuf)[0];
+        *value = ((uint8_t *)i2cTransaction_.readBuf)[0];
     }
 
     sem_post(&lock_);
@@ -168,13 +167,13 @@ bool    MPU6050_write16(uint8_t address, uint16_t value)
 
     sem_wait(&lock_);
 
-    ((uint8_t *)i2cTransaction.writeBuf)[0] = address;
-    ((uint8_t *)i2cTransaction.writeBuf)[1] = (value >> 8) & 0xFF;
-    ((uint8_t *)i2cTransaction.writeBuf)[2] = value & 0xFF;
-    i2cTransaction.writeCount = 3;
-    i2cTransaction.readCount = 0;
+    ((uint8_t *)i2cTransaction_.writeBuf)[0] = address;
+    ((uint8_t *)i2cTransaction_.writeBuf)[1] = (value >> 8) & 0xFF;
+    ((uint8_t *)i2cTransaction_.writeBuf)[2] = value & 0xFF;
+    i2cTransaction_.writeCount = 3;
+    i2cTransaction_.readCount = 0;
 
-    if (!I2C_transfer(i2c_, &i2cTransaction))
+    if (!I2C_transfer(i2c_, &i2cTransaction_))
     {
         Trace_printf(hDisplaySerial, "I2C Bus fault.");
         ret = false;
@@ -191,18 +190,18 @@ bool    MPU6050_read16(uint8_t address, uint16_t *value)
 
     sem_wait(&lock_);
 
-    ((uint8_t *)i2cTransaction.writeBuf)[0] = address;
-    i2cTransaction.writeCount = 1;
-    i2cTransaction.readCount = 2;
+    ((uint8_t *)i2cTransaction_.writeBuf)[0] = address;
+    i2cTransaction_.writeCount = 1;
+    i2cTransaction_.readCount = 2;
 
-    if (!I2C_transfer(i2c_, &i2cTransaction))
+    if (!I2C_transfer(i2c_, &i2cTransaction_))
     {
         Trace_printf(hDisplaySerial, "I2C Bus fault.");
         ret = false;
     }
     else
     {
-        *value = (((uint16_t)((uint8_t *)i2cTransaction.readBuf)[0] << 8) | ((uint8_t *)i2cTransaction.readBuf)[1]);
+        *value = (((uint16_t)((uint8_t *)i2cTransaction_.readBuf)[0] << 8) | ((uint8_t *)i2cTransaction_.readBuf)[1]);
     }
 
     sem_post(&lock_);
@@ -216,12 +215,12 @@ bool    MPU6050_writeArray(uint8_t address, uint8_t *values, uint8_t length)
 
     sem_wait(&lock_);
 
-    ((uint8_t *)i2cTransaction.writeBuf)[0] = address;
-    memcpy(&((uint8_t *)i2cTransaction.writeBuf)[1], values, length);
-    i2cTransaction.writeCount = length+1;
-    i2cTransaction.readCount = 0;
+    ((uint8_t *)i2cTransaction_.writeBuf)[0] = address;
+    memcpy(&((uint8_t *)i2cTransaction_.writeBuf)[1], values, length);
+    i2cTransaction_.writeCount = length+1;
+    i2cTransaction_.readCount = 0;
 
-    if (!I2C_transfer(i2c_, &i2cTransaction))
+    if (!I2C_transfer(i2c_, &i2cTransaction_))
     {
         sem_post(&lock_);
         Trace_printf(hDisplaySerial, "I2C Bus fault.");
@@ -239,18 +238,18 @@ bool    MPU6050_readArray(uint8_t address, uint8_t *values, uint8_t length)
 
     sem_wait(&lock_);
 
-    ((uint8_t *)i2cTransaction.writeBuf)[0] = address;
-    i2cTransaction.writeCount = 1;
-    i2cTransaction.readCount = length;
+    ((uint8_t *)i2cTransaction_.writeBuf)[0] = address;
+    i2cTransaction_.writeCount = 1;
+    i2cTransaction_.readCount = length;
 
-    if (!I2C_transfer(i2c_, &i2cTransaction))
+    if (!I2C_transfer(i2c_, &i2cTransaction_))
     {
         Trace_printf(hDisplaySerial, "I2C Bus fault.");
         ret = false;
     }
     else
     {
-        memcpy(values, i2cTransaction.readBuf, length);
+        memcpy(values, i2cTransaction_.readBuf, length);
     }
 
     sem_post(&lock_);
@@ -400,88 +399,19 @@ bool    MPU6050_popValue(uint8_t type, double* value)
 /*
  * ======== MPU6050_thread ========
  */
-void *MPU6050_thread(void *arg0)
+bool    MPU6050_startMotionDetect(float amplitude, bool _async)
 {
-    I2C_Params      i2cParams;
-    int32_t         status;
+    Trace_printf(hDisplaySerial, "Start Motion Detection");
 
-    i2cTransaction.slaveAddress = slaveId_;
-    i2cTransaction.writeBuf = txBuffer;
-    i2cTransaction.readBuf = rxBuffer;
-
-    status = sem_init(&lock_, 0, 1);
-    if (status != 0)
-    {
-        Trace_printf(hDisplaySerial, "Error creating lock_\n");
-
-        while(1);
-    }
-
-    status = sem_init(&fifoFull_, 0, 0);
-    if (status != 0)
-    {
-        Trace_printf(hDisplaySerial, "Error creating fifoFull_\n");
-
-        while(1);
-    }
-
-    status = sem_init(&runMotionDetect_, 0, 0);
-    if (status != 0)
-    {
-        Trace_printf(hDisplaySerial, "Error creating runMotionDetect_\n");
-
-        while(1);
-    }
-
-
-    I2C_Params_init(&i2cParams);
-    i2cParams.bitRate = I2C_400kHz;
-
-    i2c_ = I2C_open(Board_I2C_TMP, &i2cParams);
-    if (i2c_ == NULL)
-    {
-        Trace_printf(hDisplaySerial, "Error Initializing I2C\n");
-        while (1);
-    }
-    else
-    {
-        Trace_printf(hDisplaySerial, "I2C Initialized!\n");
-    }
-
-#if 1
-    interruptHandle = PIN_open(&interruptPinState, interruptPinTable);
-    if(!interruptHandle)
-    {
-        /* Error initializing button pins */
-        while(1);
-    }
-
-    if (PIN_registerIntCb(interruptHandle, &MPU6050_interruptCallbackFxn) != 0)
-    {
-        /* Error registering button callback function */
-        while(1);
-    }
-#endif
-
-    MPU6050_write8(MPU6050_PWR_MGMT_1, 0x80);
+    MPU6050_write8(MPU6050_FIFO_CTRL, MPU6050_FIFO_CTRL_ACCL);
+    MPU6050_write8(MPU6050_INT_ENABLE, MPU6050_INT_ENABLE_FIFO_OVERFLOW);
+    MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_RESET);
     CPUdelay(10000*12);
-    MPU6050_write8(MPU6050_PWR_MGMT_1, MPU6050_PWR_MGMT_TEMP_DISABLE);
-    MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_ACCL_Z | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
-
-    while(!stop_)
+    MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_EN);
+    MPU6050_write8(MPU6050_PWR_MGMT_1, MPU6050_PWR_MGMT_CYCLE | MPU6050_PWR_MGMT_TEMP_DISABLE);
+    MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
+    if (!_async)
     {
-        Trace_printf(hDisplaySerial, "Waiting for Motion Detection Request");
-        sem_wait(&runMotionDetect_);
-
-        Trace_printf(hDisplaySerial, "Start Motion Detection");
-
-        MPU6050_write8(MPU6050_FIFO_CTRL, MPU6050_FIFO_CTRL_ACCL);
-        MPU6050_write8(MPU6050_INT_ENABLE, MPU6050_INT_ENABLE_FIFO_OVERFLOW);
-        MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_RESET);
-        CPUdelay(10000*12);
-        MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_EN);
-        MPU6050_write8(MPU6050_PWR_MGMT_1, MPU6050_PWR_MGMT_CYCLE | MPU6050_PWR_MGMT_TEMP_DISABLE);
-        MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
 #if WAKEUP
         PINCC26XX_setWakeup(interruptPinTable);
 
@@ -497,13 +427,10 @@ void *MPU6050_thread(void *arg0)
         MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_ACCL_Z | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
         MPU6050_write8(MPU6050_PWR_MGMT_1,  MPU6050_PWR_MGMT_TEMP_DISABLE);
 
-        NodeTask_motionDetected(MPU6050_getOscillationValue());
+        return  MPU6050_getOscillationValue() > amplitude;
     }
 
-    I2C_close(i2c_);
-    Trace_printf(hDisplaySerial, "I2C closed!");
-
-    return (NULL);
+    return true;
 }
 
 void    MPU6050_showRegister(uint8_t address, char *name)
@@ -516,13 +443,6 @@ void    MPU6050_showRegister(uint8_t address, char *name)
              (value8 >> 7) & 1, (value8 >> 6) & 1, (value8 >> 5) & 1, (value8 >> 4) & 1,
              (value8 >> 3) & 1, (value8 >> 2) & 1, (value8 >> 1) & 1, (value8 >> 0) & 1);
     }
-}
-
-bool    MPU6050_startMotionDetect(void)
-{
-    sem_post(&runMotionDetect_);
-
-    return  true;
 }
 
 float    MPU6050_getOscillationValue(void)
@@ -562,40 +482,66 @@ float    MPU6050_getOscillationValue(void)
  */
 bool    MPU6050_init(void)
 {
-    pthread_t           thread0;
-    pthread_attr_t      attrs;
-    struct sched_param  priParam;
-    int                 retc;
-    int                 detachState;
+    I2C_Params      i2cParams;
 
-    I2C_init();
-
-    /* Create application thread */
-    pthread_attr_init(&attrs);
-
-    detachState = PTHREAD_CREATE_DETACHED;
-    /* Set priority and stack size attributes */
-    retc = pthread_attr_setdetachstate(&attrs, detachState);
-    if (retc != 0)
+    if (sem_init(&lock_, 0, 1) != 0)
     {
+        Trace_printf(hDisplaySerial, "Error creating lock_\n");
         return  false;
     }
 
-    retc |= pthread_attr_setstacksize(&attrs, MPU6050_THREAD_STACK_SIZE);
-    if (retc != 0)
+    if (sem_init(&fifoFull_, 0, 0) != 0)
     {
+        Trace_printf(hDisplaySerial, "Error creating fifoFull_\n");
         return  false;
     }
 
-    /* Create slave thread */
-    priParam.sched_priority = 1;
-    pthread_attr_setschedparam(&attrs, &priParam);
-
-    retc = pthread_create(&thread0, &attrs, MPU6050_thread, NULL);
-    if (retc != 0)
+    if (sem_init(&runMotionDetect_, 0, 0) != 0)
     {
+        Trace_printf(hDisplaySerial, "Error creating runMotionDetect_\n");
         return  false;
     }
+
+
+    I2C_Params_init(&i2cParams);
+    i2cParams.bitRate = I2C_400kHz;
+
+    i2c_ = I2C_open(Board_I2C_TMP, &i2cParams);
+    if (i2c_ == NULL)
+    {
+        Trace_printf(hDisplaySerial, "Error Initializing I2C\n");
+        return  false;
+    }
+
+    i2cTransaction_.slaveAddress = slaveId_;
+    i2cTransaction_.writeBuf = txBuffer_;
+    i2cTransaction_.readBuf = rxBuffer_;
+
+    interruptHandle = PIN_open(&interruptPinState, interruptPinTable);
+    if(!interruptHandle)
+    {
+        /* Error initializing button pins */
+        while(1);
+    }
+
+    if (PIN_registerIntCb(interruptHandle, &MPU6050_interruptCallbackFxn) != 0)
+    {
+        /* Error registering button callback function */
+        while(1);
+    }
+
+    MPU6050_write8(MPU6050_PWR_MGMT_1, 0x80);
+    CPUdelay(10000*12);
+    MPU6050_write8(MPU6050_PWR_MGMT_1, MPU6050_PWR_MGMT_TEMP_DISABLE);
+    MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_ACCL_Z | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
 
     return true;
+}
+
+void    MPU6050_final(void)
+{
+    PIN_close(interruptHandle);
+    I2C_close(i2c_);
+    Trace_printf(hDisplaySerial, "I2C closed!");
+
 }

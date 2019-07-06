@@ -35,6 +35,8 @@
 
 #include <ti/drivers/rf/RF.h>
 
+#define NODE_NOTI_MOTION_DETECTED   0x11
+
 /* Initializes the Node Task and creates all TI-RTOS objects */
 void NodeTask_init(void);
 
@@ -42,7 +44,8 @@ void NodeTask_dataOn(void);
 bool NodeTask_dataTransfer(uint8_t* buffer, uint32_t length);
 void NodeTask_startAutoTransfer(void);
 void NodeTask_stopAutoTransfer(void);
+void NodeTask_sleep(void);
 void NodeTask_wakeup(void);
-void NodeTask_motionDetected(float value);
+void NodeTask_motionDetected(void);
 
 #endif /* TASKS_NODETASK_H_ */

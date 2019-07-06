@@ -75,8 +75,6 @@ void *slaveThread(void *arg0)
     SPI_Handle      slaveSpi;
     SPI_Params      spiParams;
     SPI_Transaction transaction;
-    uint32_t        i;
-    uint32_t        transactionId = 0;
     bool            transferOK;
     int32_t         status;
 
@@ -147,7 +145,7 @@ void *slaveThread(void *arg0)
      * configure the transfer & then set Board_SPI_SLAVE_READY high.
      */
     SPI_Params_init(&spiParams);
-    spiParams.frameFormat = SPI_POL0_PHA1;
+    spiParams.frameFormat = SPI_POL0_PHA0;
     spiParams.mode = SPI_SLAVE;
     spiParams.transferCallbackFxn = transferCompleteFxn;
     spiParams.transferMode = SPI_MODE_CALLBACK;
@@ -173,8 +171,6 @@ void *slaveThread(void *arg0)
         transaction.txBuf = (void *) txBuffer.raw;
         transaction.rxBuf = (void *) rxBuffer.raw;
 
-        /* Toggle on user LED, indicating a SPI transfer is in progress */
-        GPIO_write(Board_SPI_SLAVE_READY, 0);
 
         /*
          * Setup SPI transfer; Board_SPI_SLAVE_READY will be set to notify
@@ -183,7 +179,9 @@ void *slaveThread(void *arg0)
         transferOK = SPI_transfer(slaveSpi, &transaction);
         if (transferOK)
         {
-           /* Wait until transfer has completed */
+            GPIO_write(Board_SPI_SLAVE_READY, 0);
+
+            /* Wait until transfer has completed */
             sem_wait(&slaveSem);
 
             /*
@@ -200,6 +198,10 @@ void *slaveThread(void *arg0)
                 else if (rxBuffer.frame.cmd == 0x82)
                 {
                     NodeTask_stopAutoTransfer();
+                }
+                else if (rxBuffer.frame.cmd == 0x83)
+                {
+                    NodeTask_sleep();
                 }
                 else if (rxBuffer.frame.cmd == 0x01)
                 {
@@ -237,6 +239,7 @@ bool SPI_isValidFrame(SPI_Frame* frame)
 {
     if (frame->len > 60)
     {
+        Trace_printf(hDisplaySerial, "Invalid length![%02x, %d, %04x]\n", frame->cmd, frame->len, frame->crc);
         return  false;
     }
 

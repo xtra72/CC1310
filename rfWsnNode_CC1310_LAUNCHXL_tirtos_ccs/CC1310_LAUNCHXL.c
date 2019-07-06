@@ -426,7 +426,6 @@ DisplayUart_Object     displayUartObject;
 DisplaySharp_Object    displaySharpObject;
 
 static char uartStringBuf[BOARD_DISPLAY_UART_STRBUF_SIZE];
-static uint_least8_t sharpDisplayBuf[BOARD_DISPLAY_SHARP_SIZE * BOARD_DISPLAY_SHARP_SIZE / 8];
 
 const DisplayUart_HWAttrs displayUartHWAttrs = {
     .uartIdx      = CC1310_LAUNCHXL_UART0,
@@ -437,6 +436,7 @@ const DisplayUart_HWAttrs displayUartHWAttrs = {
 };
 
 #if 0
+static uint_least8_t sharpDisplayBuf[BOARD_DISPLAY_SHARP_SIZE * BOARD_DISPLAY_SHARP_SIZE / 8];
 const DisplaySharp_HWAttrsV1 displaySharpHWattrs = {
     .spiIndex    = CC1310_LAUNCHXL_SPI0,
     .csPin       = CC1310_LAUNCHXL_GPIO_LCD_CS,
@@ -511,29 +511,12 @@ const uint_least8_t Display_count = 0;
  */
 GPIO_PinConfig gpioPinConfigs[] = {
     /* Input pins */
-    GPIOCC26XX_DIO_13 | GPIO_DO_NOT_CONFIG,  /* Button 0 */
-    GPIOCC26XX_DIO_14 | GPIO_DO_NOT_CONFIG,  /* Button 1 */
-
-    GPIOCC26XX_DIO_06 | GPIO_DO_NOT_CONFIG,  /* CC1310_LAUNCHXL_SPI_MASTER_READY */
-    GPIOCC26XX_DIO_07 | GPIO_DO_NOT_CONFIG,  /* CC1310_LAUNCHXL_SPI_SLAVE_READY */
-    GPIOCC26XX_DIO_15 | GPIO_DO_NOT_CONFIG,  /* CC1310_LAUNCHXL_SPI_SLAVE_DATA_ON */
-
-    /* Output pins */
-//    GPIOCC26XX_DIO_07 | GPIO_DO_NOT_CONFIG,  /* Green LED */
-//    GPIOCC26XX_DIO_06 | GPIO_DO_NOT_CONFIG,  /* Red LED */
-//    GPIOCC26XX_DIO_30 | GPIO_DO_NOT_CONFIG,  /* TMP116_EN */
+   GPIOCC26XX_DIO_06 | GPIO_DO_NOT_CONFIG,  /* CC1310_LAUNCHXL_SPI_MASTER_READY */
+   GPIOCC26XX_DIO_07 | GPIO_DO_NOT_CONFIG,  /* CC1310_LAUNCHXL_SPI_SLAVE_READY */
+   GPIOCC26XX_DIO_15 | GPIO_DO_NOT_CONFIG,  /* CC1310_LAUNCHXL_SPI_SLAVE_DATA_ON */
 
     /* SPI Flash CSN */
-    GPIOCC26XX_DIO_20 | GPIO_DO_NOT_CONFIG,
-
-    /* SD CS */
-//    GPIOCC26XX_DIO_21 | GPIO_DO_NOT_CONFIG,
-
-    /* Sharp Display - GPIO configurations will be done in the Display files */
-//    GPIOCC26XX_DIO_24 | GPIO_DO_NOT_CONFIG, /* SPI chip select */
-//    GPIOCC26XX_DIO_22 | GPIO_DO_NOT_CONFIG, /* LCD power control */
-//    GPIOCC26XX_DIO_23 | GPIO_DO_NOT_CONFIG, /*LCD enable */
-
+   GPIOCC26XX_DIO_20 | GPIO_DO_NOT_CONFIG,
 };
 
 /*
@@ -766,12 +749,13 @@ const uint_least8_t NVS_count = CC1310_LAUNCHXL_NVSCOUNT;
 
 const PIN_Config BoardGpioInitTable[] = {
 
-    CC1310_LAUNCHXL_PIN_SPI_SLAVE_READY | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,       /* LED initially off          */
-    CC1310_LAUNCHXL_PIN_SPI_MASTER_READY | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_BOTHEDGES | PIN_HYSTERESIS,          /* Button is active low       */
-    CC1310_LAUNCHXL_PIN_SPI_SLAVE_DATA_ON | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,          /* Button is active low       */
+    CC1310_LAUNCHXL_PIN_SPI_SLAVE_READY | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MIN,
+    CC1310_LAUNCHXL_PIN_SPI_MASTER_READY | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_BOTHEDGES | PIN_HYSTERESIS,
+    CC1310_LAUNCHXL_PIN_SPI_SLAVE_DATA_ON | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MIN,
     CC1310_LAUNCHXL_PIN_WAKEUP | PIN_INPUT_EN | PIN_PULLDOWN | PIN_IRQ_BOTHEDGES | PIN_HYSTERESIS,       /* Wakeup */
-    //CC1310_LAUNCHXL_PIN_BTN2 | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_BOTHEDGES | PIN_HYSTERESIS,          /* Button is active low       */
+    CC1310_LAUNCHXL_PIN_MASTER_SLEEP | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_BOTHEDGES | PIN_HYSTERESIS,
     CC1310_LAUNCHXL_SPI_FLASH_CS | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MIN,  /* External flash chip select */
+
     CC1310_LAUNCHXL_UART_RX | PIN_INPUT_EN | PIN_PULLDOWN,                                              /* UART RX via debugger back channel */
     CC1310_LAUNCHXL_UART_TX | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL,                         /* UART TX via debugger back channel */
     CC1310_LAUNCHXL_SPI0_MOSI | PIN_INPUT_EN | PIN_PULLDOWN,                                            /* SPI master out - slave in */

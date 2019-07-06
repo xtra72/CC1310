@@ -63,8 +63,10 @@
 #define MPU6050_USER_CTRL_FIFO_RESET    (1 << 2)
 
 bool    MPU6050_init(void);
+void    MPU6050_final(void);
+
 bool    MPU6050_readValue(uint8_t type, double* value);
-bool    MPU6050_startMotionDetect(void);
+bool    MPU6050_startMotionDetect(float amplitude, bool _async);
 
 
 #endif /* MPU6050_H_ */
