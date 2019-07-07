@@ -61,7 +61,6 @@ int main(void)
     NodeRadioTask_init();
     NodeTask_init();
     SpiSlave_init();
-    //MPU6050_init();
 
     /* Start BIOS */
     BIOS_start();

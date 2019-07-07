@@ -171,13 +171,6 @@ void *slaveThread(void *arg0)
         transaction.txBuf = (void *) txBuffer.raw;
         transaction.rxBuf = (void *) rxBuffer.raw;
 
-        /* Toggle on user LED, indicating a SPI transfer is in progress */
-
-
-        /*
-         * Setup SPI transfer; Board_SPI_SLAVE_READY will be set to notify
-         * master the slave is ready.
-         */
         transferOK = SPI_transfer(slaveSpi, &transaction);
         if (transferOK)
         {
@@ -185,32 +178,42 @@ void *slaveThread(void *arg0)
             {
                 CPUdelay(10);
             }
+
             Trace_printf(hDisplaySerial, "Waiting transfer");
             GPIO_write(Board_SPI_SLAVE_READY, 0);
+
            /* Wait until transfer has completed */
             sem_wait(&slaveSem);
 
-            /*
-             * Drive Board_SPI_SLAVE_READY high to indicate slave is not ready
-             * for another transfer yet.
-             */
+            while(!GPIO_read(Board_SPI_MASTER_READY))
+            {
+                CPUdelay(10);
+            }
 
             GPIO_write(Board_SPI_SLAVE_READY, 1);
             if (SPI_isValidFrame(&rxBuffer.frame))
             {
                 if (rxBuffer.frame.cmd == 0x81)
                 {
-                    NodeTask_startAutoTransfer();
+                    NodeTask_testTransferStart();
                 }
                 else if (rxBuffer.frame.cmd == 0x82)
                 {
-                    NodeTask_stopAutoTransfer();
+                    NodeTask_testTransferStop();
+                }
+                else if (rxBuffer.frame.cmd == 0x83)
+                {
+                    NodeTask_motionDetectionStart();
+                }
+                else if (rxBuffer.frame.cmd == 0x84)
+                {
+                    NodeTask_motionDetectionStop();
                 }
                 else if (rxBuffer.frame.cmd == 0x01)
                 {
-                    while(!NodeTask_dataTransfer(rxBuffer.frame.payload, rxBuffer.frame.len))
+                    if (!NodeTask_postTransfer(rxBuffer.frame.payload, rxBuffer.frame.len))
                     {
-                        CPUdelay(10);
+                        Trace_printf(hDisplaySerial, "Data Tranfer Failed!");
                     }
                 }
                 else if (rxBuffer.frame.cmd != 0x00)

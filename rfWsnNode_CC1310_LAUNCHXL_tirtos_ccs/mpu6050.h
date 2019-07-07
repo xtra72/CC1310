@@ -64,7 +64,7 @@
 
 bool    MPU6050_init(void);
 bool    MPU6050_readValue(uint8_t type, double* value);
-bool    MPU6050_startMotionDetect(void);
+bool    MPU6050_startMotionDetection(float _limit);
 
 
 #endif /* MPU6050_H_ */

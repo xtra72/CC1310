@@ -31,7 +31,6 @@
 #include "Trace.h"
 #include "NodeTask.h"
 
-#define MPU6050_THREAD_STACK_SIZE   (1024)
 #define MPU6050_BUFFER_LENGTH_MAX   128
 
 #define WAKEUP  0
@@ -70,7 +69,6 @@ void    MPU6050_showRegister(uint8_t address, char *name);
 float    MPU6050_getOscillationValue(void);
 
 /* Semaphore to block slave until transfer is complete */
-sem_t runMotionDetect_;
 sem_t lock_;
 sem_t fifoFull_;
 
@@ -400,110 +398,35 @@ bool    MPU6050_popValue(uint8_t type, double* value)
 /*
  * ======== MPU6050_thread ========
  */
-void *MPU6050_thread(void *arg0)
+
+bool    MPU6050_startMotionDetection(float _limit)
 {
-    I2C_Params      i2cParams;
-    int32_t         status;
-
-    i2cTransaction.slaveAddress = slaveId_;
-    i2cTransaction.writeBuf = txBuffer;
-    i2cTransaction.readBuf = rxBuffer;
-
-    status = sem_init(&lock_, 0, 1);
-    if (status != 0)
-    {
-        Trace_printf(hDisplaySerial, "Error creating lock_\n");
-
-        while(1);
-    }
-
-    status = sem_init(&fifoFull_, 0, 0);
-    if (status != 0)
-    {
-        Trace_printf(hDisplaySerial, "Error creating fifoFull_\n");
-
-        while(1);
-    }
-
-    status = sem_init(&runMotionDetect_, 0, 0);
-    if (status != 0)
-    {
-        Trace_printf(hDisplaySerial, "Error creating runMotionDetect_\n");
-
-        while(1);
-    }
-
-
-    I2C_Params_init(&i2cParams);
-    i2cParams.bitRate = I2C_400kHz;
-
-    i2c_ = I2C_open(Board_I2C_TMP, &i2cParams);
-    if (i2c_ == NULL)
-    {
-        Trace_printf(hDisplaySerial, "Error Initializing I2C\n");
-        while (1);
-    }
-    else
-    {
-        Trace_printf(hDisplaySerial, "I2C Initialized!\n");
-    }
-
-#if 1
-    interruptHandle = PIN_open(&interruptPinState, interruptPinTable);
-    if(!interruptHandle)
-    {
-        /* Error initializing button pins */
-        while(1);
-    }
-
-    if (PIN_registerIntCb(interruptHandle, &MPU6050_interruptCallbackFxn) != 0)
-    {
-        /* Error registering button callback function */
-        while(1);
-    }
-#endif
-
-    MPU6050_write8(MPU6050_PWR_MGMT_1, 0x80);
+    Trace_printf(hDisplaySerial, "Start Motion Detection");
+    MPU6050_write8(MPU6050_FIFO_CTRL, MPU6050_FIFO_CTRL_ACCL);
+    MPU6050_write8(MPU6050_INT_ENABLE, MPU6050_INT_ENABLE_FIFO_OVERFLOW);
+    MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_RESET);
     CPUdelay(10000*12);
-    MPU6050_write8(MPU6050_PWR_MGMT_1, MPU6050_PWR_MGMT_TEMP_DISABLE);
-    MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_ACCL_Z | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
+    MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_EN);
+    MPU6050_write8(MPU6050_PWR_MGMT_1, MPU6050_PWR_MGMT_CYCLE | MPU6050_PWR_MGMT_TEMP_DISABLE);
+    MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
 
-    while(!stop_)
-    {
-        Trace_printf(hDisplaySerial, "Waiting for Motion Detection Request");
-        sem_wait(&runMotionDetect_);
-
-        Trace_printf(hDisplaySerial, "Start Motion Detection");
-
-        MPU6050_write8(MPU6050_FIFO_CTRL, MPU6050_FIFO_CTRL_ACCL);
-        MPU6050_write8(MPU6050_INT_ENABLE, MPU6050_INT_ENABLE_FIFO_OVERFLOW);
-        MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_RESET);
-        CPUdelay(10000*12);
-        MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_EN);
-        MPU6050_write8(MPU6050_PWR_MGMT_1, MPU6050_PWR_MGMT_CYCLE | MPU6050_PWR_MGMT_TEMP_DISABLE);
-        MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
 #if WAKEUP
-        PINCC26XX_setWakeup(interruptPinTable);
+    PINCC26XX_setWakeup(interruptPinTable);
 
-        /* Go to shutdown */
-        Power_shutdown(0, 0);
+    /* Go to shutdown */
+    Power_shutdown(0, 0);
 
 #else
-        PIN_setInterrupt(interruptHandle, PIN_IRQ_POSEDGE);
-        sem_wait(&fifoFull_);
-        PIN_setInterrupt(interruptHandle, PIN_IRQ_DIS);
+    PIN_setInterrupt(interruptHandle, PIN_IRQ_POSEDGE);
+    sem_wait(&fifoFull_);
+    PIN_setInterrupt(interruptHandle, PIN_IRQ_DIS);
 #endif
-        MPU6050_write8(MPU6050_INT_ENABLE, 0);
-        MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_ACCL_Z | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
-        MPU6050_write8(MPU6050_PWR_MGMT_1,  MPU6050_PWR_MGMT_TEMP_DISABLE);
 
-        NodeTask_motionDetected(MPU6050_getOscillationValue());
-    }
+    MPU6050_write8(MPU6050_INT_ENABLE, 0);
+    MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_ACCL_Z | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
+    MPU6050_write8(MPU6050_PWR_MGMT_1,  MPU6050_PWR_MGMT_TEMP_DISABLE);
 
-    I2C_close(i2c_);
-    Trace_printf(hDisplaySerial, "I2C closed!");
-
-    return (NULL);
+    return  MPU6050_getOscillationValue() > _limit;
 }
 
 void    MPU6050_showRegister(uint8_t address, char *name)
@@ -516,13 +439,6 @@ void    MPU6050_showRegister(uint8_t address, char *name)
              (value8 >> 7) & 1, (value8 >> 6) & 1, (value8 >> 5) & 1, (value8 >> 4) & 1,
              (value8 >> 3) & 1, (value8 >> 2) & 1, (value8 >> 1) & 1, (value8 >> 0) & 1);
     }
-}
-
-bool    MPU6050_startMotionDetect(void)
-{
-    sem_post(&runMotionDetect_);
-
-    return  true;
 }
 
 float    MPU6050_getOscillationValue(void)
@@ -562,40 +478,55 @@ float    MPU6050_getOscillationValue(void)
  */
 bool    MPU6050_init(void)
 {
-    pthread_t           thread0;
-    pthread_attr_t      attrs;
-    struct sched_param  priParam;
-    int                 retc;
-    int                 detachState;
+
+    I2C_Params      i2cParams;
+    int32_t         status;
 
     I2C_init();
 
-    /* Create application thread */
-    pthread_attr_init(&attrs);
+    i2cTransaction.slaveAddress = slaveId_;
+    i2cTransaction.writeBuf = txBuffer;
+    i2cTransaction.readBuf = rxBuffer;
 
-    detachState = PTHREAD_CREATE_DETACHED;
-    /* Set priority and stack size attributes */
-    retc = pthread_attr_setdetachstate(&attrs, detachState);
-    if (retc != 0)
+    if (sem_init(&lock_, 0, 1) != 0)
     {
+        Trace_printf(hDisplaySerial, "Error creating lock_\n");
         return  false;
     }
 
-    retc |= pthread_attr_setstacksize(&attrs, MPU6050_THREAD_STACK_SIZE);
-    if (retc != 0)
+    if (sem_init(&fifoFull_, 0, 0) != 0)
     {
+        Trace_printf(hDisplaySerial, "Error creating fifoFull_\n");
         return  false;
     }
 
-    /* Create slave thread */
-    priParam.sched_priority = 1;
-    pthread_attr_setschedparam(&attrs, &priParam);
+    I2C_Params_init(&i2cParams);
+    i2cParams.bitRate = I2C_400kHz;
 
-    retc = pthread_create(&thread0, &attrs, MPU6050_thread, NULL);
-    if (retc != 0)
+    i2c_ = I2C_open(Board_I2C_TMP, &i2cParams);
+    if (i2c_ == NULL)
     {
+        Trace_printf(hDisplaySerial, "Error Initializing I2C\n");
         return  false;
     }
 
-    return true;
+    interruptHandle = PIN_open(&interruptPinState, interruptPinTable);
+    if(!interruptHandle)
+    {
+        /* Error initializing button pins */
+        return  false;
+    }
+
+    if (PIN_registerIntCb(interruptHandle, &MPU6050_interruptCallbackFxn) != 0)
+    {
+        /* Error registering button callback function */
+        return  false;
+    }
+
+    MPU6050_write8(MPU6050_PWR_MGMT_1, 0x80);
+    CPUdelay(10000*12);
+    MPU6050_write8(MPU6050_PWR_MGMT_1, MPU6050_PWR_MGMT_TEMP_DISABLE);
+    MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_ACCL_Z | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
+
+    return   true;
 }

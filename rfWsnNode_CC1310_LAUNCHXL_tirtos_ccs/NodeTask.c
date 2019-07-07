@@ -44,6 +44,7 @@
 
 /* TI-RTOS Header files */ 
 #include <ti/drivers/PIN.h>
+#include <ti/drivers/GPIO.h>
 #include <ti/display/Display.h>
 #include <ti/display/DisplayExt.h>
 
@@ -65,18 +66,25 @@
 #define NODE_TASK_PRIORITY   3
 
 #define NODE_EVENT_ALL                  0xFFFFFFFF
-#define NODE_EVENT_TRANSFER             (uint32_t)(1 << 1)
-#define NODE_EVENT_TEST_RESET           (uint32_t)(1 << 2)
-#define NODE_EVENT_AUTO_TRANSFER_START  (uint32_t)(1 << 3)
-#define NODE_EVENT_AUTO_TRANSFER_STOP   (uint32_t)(1 << 4)
-#define NODE_EVENT_OVERRUN_DETECTED     (uint32_t)(1 << 5)
-#define NODE_EVENT_OVERRUN_RELEASED     (uint32_t)(1 << 6)
-#define NODE_EVENT_DATA_ON              (uint32_t)(1 << 7)
-#define NODE_EVENT_WAKEUP               (uint32_t)(1 << 8)
-#define NODE_EVENT_SLEEP                (uint32_t)(1 << 9)
+#define NODE_EVENT_DATA_TRANSFER        (uint32_t)(1 << 1)
+#define NODE_EVENT_POST_TRANSFER        (uint32_t)(1 << 2)
+#define NODE_EVENT_TEST_RESET           (uint32_t)(1 << 3)
+#define NODE_EVENT_TEST_TRANSFER_START  (uint32_t)(1 << 4)
+#define NODE_EVENT_TEST_TRANSFER_STOP   (uint32_t)(1 << 5)
+#define NODE_EVENT_OVERRUN_DETECTED     (uint32_t)(1 << 6)
+#define NODE_EVENT_OVERRUN_RELEASED     (uint32_t)(1 << 7)
+#define NODE_EVENT_DATA_ON              (uint32_t)(1 << 8)
+#define NODE_EVENT_WAKEUP               (uint32_t)(1 << 9)
+#define NODE_EVENT_MOTION_DETECTION_START    (uint32_t)(1 << 10)
+#define NODE_EVENT_MOTION_DETECTION_STOP     (uint32_t)(1 << 11)
+
+#define TRANSFER_EVENT_ALL              0xFFFFFFFF
+#define TRANSFER_EVENT_SUCCESS          (uint32_t)(1 << 1)
+#define TRANSFER_EVENT_FAILED           (uint32_t)(1 << 2)
 
 #define NODE_ACTIVITY_LED           Board_PIN_LED0
 #define NODE_MESSAGE_QUEUE_FULL_LED Board_PIN_LED1
+
 
 
 /***** Variable declarations *****/
@@ -85,6 +93,9 @@ Task_Struct nodeTask;    /* Not static so you can see in ROV */
 static uint8_t nodeTaskStack[NODE_TASK_STACK_SIZE];
 Event_Struct nodeEvent;  /* Not static so you can see in ROV */
 static Event_Handle nodeEventHandle;
+
+Event_Struct transferEvent;  /* Not static so you can see in ROV */
+static Event_Handle transferEventHandle;
 
 /* Clock for the transfer timeout */
 Clock_Struct transferTimeoutClock;     /* not static so you can see in ROV */
@@ -95,8 +106,8 @@ Clock_Struct messageTimeoutClock;     /* not static so you can see in ROV */
 static Clock_Handle messageTimeoutClockHandle;
 
 /* Clock for the motion detection timeout */
-//Clock_Struct motionDetectionTimeoutClock;     /* not static so you can see in ROV */
-//static Clock_Handle motionDetectionTimeoutClockHandle;
+Clock_Struct postMotionDetectedTimeoutClock;     /* not static so you can see in ROV */
+static Clock_Handle postMotionDetectedTimeoutClockHandle;
 
 /* Pin driver handle */
 static PIN_Handle ledPinHandle;
@@ -150,6 +161,8 @@ static  uint32_t    sampleIndex = 0;
 static  uint32_t    transferCount = 0;
 static  uint32_t    transferSuccessCount = 0;
 static  uint32_t    transferDataSize = 0;
+static  uint32_t    transferMaxRetryCount = 10;
+static  uint32_t    transferRetryCount = 0;
 
 static  uint32_t    totalTransferCount = 0;
 static  uint32_t    totalTransferSuccessCount = 0;
@@ -157,10 +170,18 @@ static  uint32_t    totalTransferDataSize = 0;
 
 static  uint32_t    previousTransferTime = 0;
 
-static  uint32_t    transferPeriod = 1;
 static  uint32_t    messageGenerationOverrunSleep = 200;
 
 static  bool        overrun = false;
+
+static  uint32_t    motionDetectionTryCount = 0;
+static  uint32_t    motionDetectionMaxCount = 10;
+
+static  uint32_t    noitificationTryCount = 0;
+static  uint32_t    noitificationMaxCount = 10;
+
+static  uint8_t     directTransferData[128];
+static  uint32_t    directTransferDataLength = 0;
 
 #define msToClock(ms) ((ms) * 1000 / Clock_tickPeriod)
 
@@ -168,7 +189,23 @@ static  bool        overrun = false;
 static void nodeTaskFunction(UArg arg0, UArg arg1);
 static void transferTimeoutCallback(UArg arg0);
 static void messageTimeoutCallback(UArg arg0);
-static void motionDetectionTimeoutCallback(UArg arg0);
+static void postMotionDetectedTimeoutCallback(UArg arg0);
+
+static void NodeTask_eventTestTransferStart(void);
+static void NodeTask_eventTestTransferStop(void);
+static void NodeTask_eventTestReset(void);
+
+static void NodeTask_eventMotionDetectionStart(void);
+static void NodeTask_eventMotionDetectionStop(void);
+
+static void NodeTask_eventDataTransfer(void);
+static void NodeTask_eventPostTransfer(void);
+
+static void NodeTask_postNotification(uint8_t _type);
+static void NodeTask_postMotionDetected(void);
+
+static void NodeTask_dataTransferSuccess(void);
+static void NodeTask_dataTransferFailed(void);
 
 static void buttonCallback(PIN_Handle handle, PIN_Id pinId);
 
@@ -185,20 +222,24 @@ void NodeTask_init(void)
     Event_construct(&nodeEvent, &eventParam);
     nodeEventHandle = Event_handle(&nodeEvent);
 
+    Event_Params_init(&eventParam);
+    Event_construct(&transferEvent, &eventParam);
+    transferEventHandle = Event_handle(&transferEvent);
+
     /* Create clock object which is used for fast report timeout */
     Clock_Params clkParams;
     Clock_Params_init(&clkParams);
 
     clkParams.period = 0;
     clkParams.startFlag = FALSE;
-//    Clock_construct(&transferTimeoutClock, transferTimeoutCallback, 1, &clkParams);
-//    transferTimeoutClockHandle = Clock_handle(&transferTimeoutClock);
+    Clock_construct(&transferTimeoutClock, transferTimeoutCallback, 1, &clkParams);
+    transferTimeoutClockHandle = Clock_handle(&transferTimeoutClock);
 
-//    Clock_construct(&messageTimeoutClock, messageTimeoutCallback, 1, &clkParams);
-//    messageTimeoutClockHandle = Clock_handle(&messageTimeoutClock);
+    Clock_construct(&messageTimeoutClock, messageTimeoutCallback, 1, &clkParams);
+    messageTimeoutClockHandle = Clock_handle(&messageTimeoutClock);
 
-//    Clock_construct(&motionDetectionTimeoutClock, motionDetectionTimeoutCallback, 0, &clkParams);
-//    motionDetectionTimeoutClockHandle = Clock_handle(&motionDetectionTimeoutClock);
+    Clock_construct(&postMotionDetectedTimeoutClock, postMotionDetectedTimeoutCallback, 0, &clkParams);
+    postMotionDetectedTimeoutClockHandle = Clock_handle(&postMotionDetectedTimeoutClock);
 
     /* Create the node task */
     Task_Params_init(&nodeTaskParams);
@@ -240,10 +281,6 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
     }
 
     /* setup timeout for fast report timeout */
-//    Clock_setPeriod(transferTimeoutClockHandle, msToClock(transferPeriod));
-//    Clock_setPeriod(messageTimeoutClockHandle, msToClock(testConfigs[configIndex].period));
-//    Clock_setPeriod(motionDetectionTimeoutClockHandle, msToClock(30000));
-
 
     buttonPinHandle = PIN_open(&buttonPinState, buttonPinTable);
     if (!buttonPinHandle)
@@ -257,7 +294,8 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         System_abort("Error registering button callback function");
     }
 
-//    Clock_start(motionDetectionTimeoutClockHandle);
+
+    MPU6050_init();
 
     while (1)
     {
@@ -265,140 +303,26 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         uint32_t events = Event_pend(nodeEventHandle, 0, NODE_EVENT_ALL, BIOS_WAIT_FOREVER);
 
         /* If new ADC value, send this data */
-        if (events & NODE_EVENT_AUTO_TRANSFER_START)
+        if (events & NODE_EVENT_TEST_TRANSFER_START)
         {
-            if (!Clock_isActive(transferTimeoutClockHandle))
-            {
-                Clock_start(transferTimeoutClockHandle);
-                Clock_start(messageTimeoutClockHandle);
-                Trace_printf(hDisplaySerial, "Transfer started");
-            }
-
+            NodeTask_eventTestTransferStart();
         }
-        else if (events & NODE_EVENT_AUTO_TRANSFER_STOP)
+        else if (events & NODE_EVENT_TEST_TRANSFER_STOP)
         {
-            if (Clock_isActive(transferTimeoutClockHandle))
-            {
-                Clock_stop(transferTimeoutClockHandle);
-                Clock_stop(messageTimeoutClockHandle);
-                Trace_printf(hDisplaySerial, "Transfer stopped");
-            }
+            NodeTask_eventTestTransferStop();
         }
         else if (events & NODE_EVENT_TEST_RESET)
         {
-            uint32_t    currentTransferTime;
-            /* Toggle activity LED */
-
-#if !defined Board_CC1350STK
-            PIN_setOutputValue(ledPinHandle, NODE_ACTIVITY_LED,!PIN_getOutputValue(NODE_ACTIVITY_LED));
-#endif
-            currentTransferTime = (Clock_getTicks() * Clock_tickPeriod) / 1000000;
-
-            Clock_stop(transferTimeoutClockHandle);
-            Clock_stop(messageTimeoutClockHandle);
-
-            if (NodeRadioTask_testReset() == NodeRadioStatus_Success)
-            {
-                configIndex = (configIndex + 1) % (sizeof(testConfigs) / sizeof(struct TestConfig));
-                Trace_printf(hDisplaySerial, "Test Reset : %08d %08d", testConfigs[configIndex].dataLength, testConfigs[configIndex].loopCount);
-
-                transferCount =  0;
-                transferDataSize = 0;
-                transferSuccessCount = 0;
-                totalTransferCount =  0;
-                totalTransferDataSize = 0;
-                totalTransferSuccessCount = 0;
-            }
-            else
-            {
-                Trace_printf(hDisplaySerial, "Test Reset failed");
-            }
-
-            previousTransferTime = currentTransferTime;
-
+            NodeTask_eventTestReset();
         }
-        else if (events & NODE_EVENT_TRANSFER)
+        else if (events & NODE_EVENT_DATA_TRANSFER)
         {
-            /* Toggle activity LED */
-            if (DataQ_count() != 0)
-            {
-                uint32_t    currentTransferTime;
-
-                #if !defined Board_CC1350STK
-                            PIN_setOutputValue(ledPinHandle, NODE_ACTIVITY_LED,!PIN_getOutputValue(NODE_ACTIVITY_LED));
-                #endif
-
-                uint32_t    length = 0;
-                if (DataQ_front(rawData, sizeof(rawData), &length))
-                {
-                    transferCount++;
-                    totalTransferCount++;
-                    transferDataSize += length;
-                    totalTransferDataSize += length;
-
-                    currentTransferTime = (Clock_getTicks() * Clock_tickPeriod) / 1000;
-
-                    if (NodeRadioTask_sendRawData(rawData, length) == NodeRadioStatus_Success)
-                    {
-                        DataQ_pop(NULL, 0, &length);
-                        transferSuccessCount++;
-                        totalTransferSuccessCount++;
-#if 0
-                        uint32_t    i;
-                        static  char buffer[256] = {0,};
-                         for(i = 0 ; i < length ; i++)
-                         {
-                             uint8_t hi = (rawData[i] >> 4) & 0x0F;
-                             uint8_t lo = (rawData[i]     ) & 0x0F;
-                             if (hi < 10)
-                             {
-                                 buffer[i*2] ='0' + hi;
-                             }
-                             else
-                             {
-                                 buffer[i*2] ='A' + hi - 10;
-                             }
-
-                             if (lo < 10)
-                             {
-                                 buffer[i*2 + 1] ='0' + lo;
-                             }
-                             else
-                             {
-                                 buffer[i*2 + 1] ='A' + lo - 10;
-                             }
-                         }
-
-                         buffer[i*2]= 0;
-
-                         Display_printf(hDisplaySerial, 0, 0, "AT+RCVD: %4d.%03d %d, %s", currentTransferTime / 1000,currentTransferTime % 1000, length, buffer);
-#endif
-                    }
-                    else
-                    {
-                        uint32_t    index = 0;
-
-                        index = ((uint32_t)rawData[0] << 24) | ((uint32_t)rawData[1] << 16) | ((uint32_t)rawData[2] << 8) | (uint32_t)rawData[3];
-                        Display_printf(hDisplaySerial, 0, 0, "Transfer error : %8x", index);
-                    }
-                }
-
-                if (currentTransferTime / 1000 != previousTransferTime / 1000)
-                {
-                    Trace_printf(hDisplaySerial, "%8d %8d %8d %8d %8d %8d",
-                                   transferCount, transferDataSize, transferSuccessCount,
-                                   totalTransferCount, totalTransferDataSize, totalTransferSuccessCount);
-                    transferCount =  0;
-                    transferDataSize = 0;
-                    transferSuccessCount = 0;
-                }
-
-                previousTransferTime = currentTransferTime;
-            }
+            NodeTask_eventDataTransfer();
         }
-        else
+
+        if (events & NODE_EVENT_POST_TRANSFER)
         {
-            GPIO_write(Board_SPI_SLAVE_DATA_ON, !GPIO_read(Board_SPI_SLAVE_DATA_ON));
+            NodeTask_eventPostTransfer();
         }
 
         if( events & NODE_EVENT_OVERRUN_DETECTED)
@@ -428,12 +352,14 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
             Trace_printf(hDisplaySerial, "Over Run released");
         }
 
-        if( events & NODE_EVENT_SLEEP)
+        if( events & NODE_EVENT_MOTION_DETECTION_START)
         {
-            Trace_printf(hDisplaySerial, "Start motion detect");
-            MPU6050_startMotionDetect();
+            NodeTask_eventMotionDetectionStart();
         }
-
+        else if( events & NODE_EVENT_MOTION_DETECTION_STOP)
+        {
+            NodeTask_eventMotionDetectionStop();
+        }
     }
 }
 
@@ -445,44 +371,11 @@ static void buttonCallback(PIN_Handle handle, PIN_Id pinId)
 {
     /* Debounce logic, only toggle if the button is still pushed (low) */
     CPUdelay(8000*50);
-
-#if 0
-    switch(pinId)
-    {
-    case    Board_PIN_BUTTON0:
-        {
-            if (PIN_getInputValue(Board_PIN_BUTTON0) == 0)
-            {
-                //start fast report and timeout
-                Event_post(nodeEventHandle, NODE_EVENT_TEST_RESET);
-            }
-        }
-        break;
-
-    case    Board_PIN_BUTTON1:
-        {
-
-            if (PIN_getInputValue(Board_PIN_BUTTON1) == 0)
-            {
-                if (Clock_isActive(transferTimeoutClockHandle))
-                {
-                    Event_post(nodeEventHandle, NODE_EVENT_AUTO_TRANSFER_STOP);
-                }
-                else
-                {
-                    Event_post(nodeEventHandle, NODE_EVENT_AUTO_TRANSFER_START);
-                }
-            }
-        }
-        break;
-    }
-#endif
 }
 
 static void transferTimeoutCallback(UArg arg0)
 {
     //stop fast report
-    Event_post(nodeEventHandle, NODE_EVENT_TRANSFER);
 }
 
 
@@ -515,9 +408,17 @@ static void messageTimeoutCallback(UArg arg0)
     }
 }
 
-static void motionDetectionTimeoutCallback(UArg arg0)
+void postMotionDetectedTimeoutCallback(UArg arg0)
 {
-    Event_post(nodeEventHandle, NODE_EVENT_SLEEP);
+    if (++noitificationTryCount <= noitificationMaxCount)
+    {
+        NodeTask_postMotionDetected();
+    }
+    else
+    {
+        Clock_stop(postMotionDetectedTimeoutClockHandle);
+        Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_START);
+    }
 }
 
 void NodeTask_dataOn(void)
@@ -526,26 +427,51 @@ void NodeTask_dataOn(void)
     Event_post(nodeEventHandle, NODE_EVENT_DATA_ON);
 }
 
-void NodeTask_startAutoTransfer(void)
+void NodeTask_testTransferStart(void)
 {
-    Event_post(nodeEventHandle, NODE_EVENT_AUTO_TRANSFER_START);
+    Event_post(nodeEventHandle, NODE_EVENT_TEST_TRANSFER_START);
 }
 
-void NodeTask_stopAutoTransfer(void)
+void NodeTask_testTransferStop(void)
 {
-    Event_post(nodeEventHandle, NODE_EVENT_AUTO_TRANSFER_STOP);
+    Event_post(nodeEventHandle, NODE_EVENT_TEST_TRANSFER_STOP);
 }
 
 bool NodeTask_dataTransfer(uint8_t* buffer, uint32_t length)
 {
-    if (DataQ_push(buffer, length))
-    {
-        Event_post(nodeEventHandle, NODE_EVENT_TRANSFER);
+    memcpy(directTransferData, buffer, length);
+    directTransferDataLength = length;
 
+    Event_post(nodeEventHandle, NODE_EVENT_DATA_TRANSFER);
+
+    uint32_t events = Event_pend(transferEventHandle, 0, NODE_EVENT_ALL, 1000);
+    if (events & TRANSFER_EVENT_SUCCESS)
+    {
         return  true;
     }
 
     return  false;
+}
+
+bool NodeTask_postTransfer(uint8_t* buffer, uint32_t length)
+{
+    if (DataQ_push(buffer, length) == true)
+    {
+        Event_post(nodeEventHandle, NODE_EVENT_POST_TRANSFER);
+        return  true;
+    }
+
+    return  false;
+}
+
+void    NodeTask_dataTransferSuccess(void)
+{
+    Event_post(transferEventHandle, TRANSFER_EVENT_SUCCESS);
+}
+
+void    NodeTask_dataTransferFailed(void)
+{
+    Event_post(transferEventHandle, TRANSFER_EVENT_FAILED);
 }
 
 void    NodeTask_wakeup(void)
@@ -553,15 +479,19 @@ void    NodeTask_wakeup(void)
     Event_post(nodeEventHandle, NODE_EVENT_WAKEUP);
 }
 
-void    NodeTask_motionDetected(float value)
+void    NodeTask_motionDetectionStart(void)
 {
-    if (value > 0.4)
-    {
-        Trace_printf(hDisplaySerial, "Motion detected!");
-    }
+    motionDetectionTryCount = 0;
+    Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_START);
 }
 
-void    NodeTask_notificationEvent(void)
+void    NodeTask_motionDetectionStop(void)
+{
+    motionDetectionTryCount = motionDetectionMaxCount;
+    Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_STOP);
+}
+
+void    NodeTask_postNotification(uint8_t _type)
 {
     //stop fast report
     static uint8_t buffer[128];
@@ -574,11 +504,12 @@ void    NodeTask_notificationEvent(void)
     buffer[dataLength++] = 1;   // Port
     buffer[dataLength++] = 0;   // Option
     buffer[dataLength++] = 0;   // Count
-    buffer[dataLength++] = 0;   // Size
+    buffer[dataLength++] = 1;   // Size
+    buffer[dataLength++] = _type;
 
     if (DataQ_push(buffer, dataLength) == true)
     {
-        Event_post(nodeEventHandle, NODE_EVENT_TRANSFER);
+        Event_post(nodeEventHandle, NODE_EVENT_POST_TRANSFER);
         if (overrun)
         {
             Event_post(nodeEventHandle, NODE_EVENT_OVERRUN_RELEASED);
@@ -588,4 +519,167 @@ void    NodeTask_notificationEvent(void)
     {
         Event_post(nodeEventHandle, NODE_EVENT_OVERRUN_DETECTED);
     }
+}
+
+void    NodeTask_postMotionDetected(void)
+{
+    NodeTask_postNotification(NODE_NOTIFICATION_TYPE_MOTION_DETECTED);
+}
+
+void    NodeTask_eventTestTransferStart(void)
+{
+    if (!Clock_isActive(transferTimeoutClockHandle))
+    {
+        Clock_start(transferTimeoutClockHandle);
+        Clock_start(messageTimeoutClockHandle);
+        Trace_printf(hDisplaySerial, "Transfer started");
+    }
+    else
+    {
+        Trace_printf(hDisplaySerial, "Transfer already started");
+    }
+}
+
+void    NodeTask_eventTestTransferStop(void)
+{
+    if (Clock_isActive(transferTimeoutClockHandle))
+    {
+        Clock_stop(transferTimeoutClockHandle);
+        Clock_stop(messageTimeoutClockHandle);
+        Trace_printf(hDisplaySerial, "Transfer stopped");
+    }
+    else
+    {
+        Trace_printf(hDisplaySerial, "Transfer not started");
+    }
+}
+
+void    NodeTask_eventTestReset(void)
+{
+    uint32_t    currentTransferTime;
+    /* Toggle activity LED */
+
+    currentTransferTime = (Clock_getTicks() * Clock_tickPeriod) / 1000000;
+
+    Clock_stop(transferTimeoutClockHandle);
+    Clock_stop(messageTimeoutClockHandle);
+
+    if (NodeRadioTask_testReset() == NodeRadioStatus_Success)
+    {
+        configIndex = (configIndex + 1) % (sizeof(testConfigs) / sizeof(struct TestConfig));
+        Trace_printf(hDisplaySerial, "Test Reset : %08d %08d", testConfigs[configIndex].dataLength, testConfigs[configIndex].loopCount);
+
+        transferCount =  0;
+        transferDataSize = 0;
+        transferSuccessCount = 0;
+        totalTransferCount =  0;
+        totalTransferDataSize = 0;
+        totalTransferSuccessCount = 0;
+    }
+    else
+    {
+        Trace_printf(hDisplaySerial, "Test Reset failed");
+    }
+
+    previousTransferTime = currentTransferTime;
+}
+
+void    NodeTask_eventMotionDetectionStart(void)
+{
+    if (++motionDetectionTryCount <= motionDetectionMaxCount)
+    {
+        Trace_printf(hDisplaySerial, "motion detection[%d]", motionDetectionTryCount);
+        if (MPU6050_startMotionDetection(0.4))
+        {
+            Trace_printf(hDisplaySerial, "Motion detected");
+
+            noitificationTryCount =  0;
+
+            NodeTask_postMotionDetected();
+            Clock_setPeriod(postMotionDetectedTimeoutClockHandle, msToClock(10000));
+            Clock_start(postMotionDetectedTimeoutClockHandle);
+
+        }
+        else
+        {
+            Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_START);
+        }
+    }
+}
+
+void    NodeTask_eventMotionDetectionStop(void)
+{
+}
+
+void    NodeTask_eventDataTransfer(void)
+{
+    if (NodeRadioTask_sendRawData(directTransferData, directTransferDataLength) == NodeRadioStatus_Success)
+    {
+        NodeTask_dataTransferSuccess();
+    }
+    else
+    {
+        NodeTask_dataTransferFailed();
+    }
+}
+
+void    NodeTask_eventPostTransfer(void)
+{
+    /* Toggle activity LED */
+    if (DataQ_count() != 0)
+    {
+        uint32_t    currentTransferTime;
+
+        #if !defined Board_CC1350STK
+                    PIN_setOutputValue(ledPinHandle, NODE_ACTIVITY_LED,!PIN_getOutputValue(NODE_ACTIVITY_LED));
+        #endif
+
+        uint32_t    length = 0;
+        if (DataQ_front(rawData, sizeof(rawData), &length))
+        {
+            transferCount++;
+            totalTransferCount++;
+            transferDataSize += length;
+            totalTransferDataSize += length;
+
+            currentTransferTime = (Clock_getTicks() * Clock_tickPeriod) / 1000;
+
+            if (NodeRadioTask_sendRawData(rawData, length) == NodeRadioStatus_Success)
+            {
+                DataQ_pop(NULL, 0, &length);
+                transferRetryCount = 0;
+                transferSuccessCount++;
+                totalTransferSuccessCount++;
+            }
+            else
+            {
+                uint32_t    index = 0;
+                index = ((uint32_t)rawData[0] << 24) | ((uint32_t)rawData[1] << 16) | ((uint32_t)rawData[2] << 8) | (uint32_t)rawData[3];
+                Display_printf(hDisplaySerial, 0, 0, "Transfer error : %8x, %d", index, transferRetryCount++);
+                if (transferMaxRetryCount <= transferRetryCount)
+                {
+                    DataQ_pop(NULL, 0, &length);
+                    Display_printf(hDisplaySerial, 0, 0, "Packet drop : %8x", index);
+                }
+            }
+        }
+
+        if (currentTransferTime / 1000 != previousTransferTime / 1000)
+        {
+            Trace_printf(hDisplaySerial, "%8d %8d %8d %8d %8d %8d",
+                           transferCount, transferDataSize, transferSuccessCount,
+                           totalTransferCount, totalTransferDataSize, totalTransferSuccessCount);
+            transferCount =  0;
+            transferDataSize = 0;
+            transferSuccessCount = 0;
+        }
+
+        previousTransferTime = currentTransferTime;
+    }
+
+    if (DataQ_count() != 0)
+    {
+        Event_post(nodeEventHandle, NODE_EVENT_POST_TRANSFER);
+    }
+
 }
