@@ -145,7 +145,7 @@ void *slaveThread(void *arg0)
      * configure the transfer & then set Board_SPI_SLAVE_READY high.
      */
     SPI_Params_init(&spiParams);
-    spiParams.frameFormat = SPI_POL0_PHA1;
+    spiParams.frameFormat = SPI_POL1_PHA1;
     spiParams.mode = SPI_SLAVE;
     spiParams.transferCallbackFxn = transferCompleteFxn;
     spiParams.transferMode = SPI_MODE_CALLBACK;
@@ -181,6 +181,11 @@ void *slaveThread(void *arg0)
         transferOK = SPI_transfer(slaveSpi, &transaction);
         if (transferOK)
         {
+            while(GPIO_read(Board_SPI_MASTER_READY))
+            {
+                CPUdelay(10);
+            }
+            Trace_printf(hDisplaySerial, "Waiting transfer");
             GPIO_write(Board_SPI_SLAVE_READY, 0);
            /* Wait until transfer has completed */
             sem_wait(&slaveSem);
@@ -189,6 +194,7 @@ void *slaveThread(void *arg0)
              * Drive Board_SPI_SLAVE_READY high to indicate slave is not ready
              * for another transfer yet.
              */
+
             GPIO_write(Board_SPI_SLAVE_READY, 1);
             if (SPI_isValidFrame(&rxBuffer.frame))
             {
@@ -204,14 +210,12 @@ void *slaveThread(void *arg0)
                 {
                     while(!NodeTask_dataTransfer(rxBuffer.frame.payload, rxBuffer.frame.len))
                     {
-                        GPIO_write(Board_SPI_SLAVE_READY, 1);
+                        CPUdelay(10);
                     }
-                    GPIO_write(Board_SPI_SLAVE_READY, 0);
-
                 }
                 else if (rxBuffer.frame.cmd != 0x00)
                 {
-                    Trace_printf(hDisplaySerial, "Data receved : cmd - %d, len = %d", rxBuffer.frame.cmd, rxBuffer.frame.len);
+                    Trace_printf(hDisplaySerial, "Unknown ata received : cmd - %d, len = %d", rxBuffer.frame.cmd, rxBuffer.frame.len);
                 }
             }
         }
@@ -219,6 +223,7 @@ void *slaveThread(void *arg0)
         {
             Trace_printf(hDisplaySerial, "Unsuccessful slave SPI transfer");
         }
+
     }
 
     SPI_close(slaveSpi);
