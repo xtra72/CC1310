@@ -51,6 +51,8 @@
 #include <ti/devices/DeviceFamily.h>
 #include DeviceFamily_constructPath(driverlib/cpu.h)
 
+#include "easylink/EasyLink.h"
+
 /* Board Header files */
 #include "Board.h"
 
@@ -82,7 +84,6 @@
 #define TRANSFER_EVENT_SUCCESS          (uint32_t)(1 << 1)
 #define TRANSFER_EVENT_FAILED           (uint32_t)(1 << 2)
 
-#define NODE_ACTIVITY_LED           Board_PIN_LED0
 #define NODE_MESSAGE_QUEUE_FULL_LED Board_PIN_LED1
 
 
@@ -109,30 +110,6 @@ static Clock_Handle messageTimeoutClockHandle;
 Clock_Struct postMotionDetectedTimeoutClock;     /* not static so you can see in ROV */
 static Clock_Handle postMotionDetectedTimeoutClockHandle;
 
-/* Pin driver handle */
-static PIN_Handle ledPinHandle;
-static PIN_State ledPinState;
-PIN_Config ledPinTable[] =
-{
-#if !defined Board_CC1350STK
-    NODE_ACTIVITY_LED | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
-    NODE_MESSAGE_QUEUE_FULL_LED | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
-#endif
-    PIN_TERMINATE
-};
-
-/*
- * Application button pin configuration table:
- *   - Buttons interrupts are configured to trigger on falling edge.
- */
-static PIN_Handle buttonPinHandle;
-static PIN_State buttonPinState;
-PIN_Config buttonPinTable[] =
-{
-//    Board_PIN_BUTTON0  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE,
-//    Board_PIN_BUTTON1  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE,
-    PIN_TERMINATE
-};
 /* Display driver handles */
 Display_Handle hDisplaySerial;
 
@@ -207,8 +184,6 @@ static void NodeTask_postMotionDetected(void);
 static void NodeTask_dataTransferSuccess(void);
 static void NodeTask_dataTransferFailed(void);
 
-static void buttonCallback(PIN_Handle handle, PIN_Id pinId);
-
 
 /***** Function definitions *****/
 void NodeTask_init(void)
@@ -273,34 +248,13 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         Trace_printf(hDisplaySerial, "Waiting for SCE ADC reading...");
     }
 
-    /* Open LED pins */
-    ledPinHandle = PIN_open(&ledPinState, ledPinTable);
-    if (!ledPinHandle)
-    {
-        System_abort("Error initializing board 3.3V domain pins\n");
-    }
-
-    /* setup timeout for fast report timeout */
-
-    buttonPinHandle = PIN_open(&buttonPinState, buttonPinTable);
-    if (!buttonPinHandle)
-    {
-        System_abort("Error initializing button pins\n");
-    }
-
-    /* Setup callback for button pins */
-    if (PIN_registerIntCb(buttonPinHandle, &buttonCallback) != 0)
-    {
-        System_abort("Error registering button callback function");
-    }
-
 
     MPU6050_init();
 
     while (1)
     {
         /* Wait for event */
-        uint32_t events = Event_pend(nodeEventHandle, 0, NODE_EVENT_ALL, BIOS_WAIT_FOREVER);
+        uint32_t events = Event_pend(nodeEventHandle, 0, NODE_EVENT_ALL, 100000);
 
         /* If new ADC value, send this data */
         if (events & NODE_EVENT_TEST_TRANSFER_START)
@@ -328,9 +282,6 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         if( events & NODE_EVENT_OVERRUN_DETECTED)
         {
             overrun = true;
-#if !defined Board_CC1350STK
-            PIN_setOutputValue(ledPinHandle, NODE_MESSAGE_QUEUE_FULL_LED, 1);
-#endif
             if (Clock_isActive(messageTimeoutClockHandle))
             {
                 Clock_setPeriod(messageTimeoutClockHandle, msToClock(messageGenerationOverrunSleep));
@@ -341,9 +292,6 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         else if( events & NODE_EVENT_OVERRUN_RELEASED)
         {
             overrun = false;
-#if !defined Board_CC1350STK
-            PIN_setOutputValue(ledPinHandle, NODE_MESSAGE_QUEUE_FULL_LED, 0);
-#endif
             if (Clock_isActive(messageTimeoutClockHandle))
             {
                 Clock_setPeriod(messageTimeoutClockHandle, msToClock(testConfigs[configIndex].period));
@@ -361,16 +309,6 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
             NodeTask_eventMotionDetectionStop();
         }
     }
-}
-
-/*
- *  ======== buttonCallback ========
- *  Pin interrupt Callback function board buttons configured in the pinTable.
- */
-static void buttonCallback(PIN_Handle handle, PIN_Id pinId)
-{
-    /* Debounce logic, only toggle if the button is still pushed (low) */
-    CPUdelay(8000*50);
 }
 
 static void transferTimeoutCallback(UArg arg0)
@@ -630,10 +568,6 @@ void    NodeTask_eventPostTransfer(void)
     {
         uint32_t    currentTransferTime;
 
-        #if !defined Board_CC1350STK
-                    PIN_setOutputValue(ledPinHandle, NODE_ACTIVITY_LED,!PIN_getOutputValue(NODE_ACTIVITY_LED));
-        #endif
-
         uint32_t    length = 0;
         if (DataQ_front(rawData, sizeof(rawData), &length))
         {
@@ -682,4 +616,25 @@ void    NodeTask_eventPostTransfer(void)
         Event_post(nodeEventHandle, NODE_EVENT_POST_TRANSFER);
     }
 
+}
+
+void    NodeTask_getRFStatus(NODETASK_RF_STATUS* status)
+{
+    status->frequency = EasyLink_getFrequency();
+    EasyLink_getRfPower(&status->power);
+    EasyLink_getRssi(&status->rssi);
+}
+
+
+void    NodeTask_getConfig(NODETASK_RF_CONFIG* config)
+{
+    config->frequency = EasyLink_getFrequency();
+}
+
+
+bool    NodeTask_setConfig(NODETASK_RF_CONFIG* config)
+{
+    EasyLink_setFrequency(config->frequency);
+
+    return  true;
 }

@@ -27,6 +27,7 @@
 #include "Trace.h"
 #include "crc16.h"
 #include "NodeTask.h"
+#include "rf.h"
 #define THREADSTACKSIZE (1024)
 
 #define SPI_MSG_LENGTH  (60)
@@ -49,6 +50,16 @@ typedef union
 bool SPI_isValidFrame(SPI_Frame* frame);
 
 extern  Display_Handle hDisplaySerial;
+
+/* Pin driver handle */
+static PIN_Handle slaveStatusHandle;
+static PIN_State slaveStatusState;
+PIN_Config slaveStatusTable[] =
+{
+     CC1310_LAUNCHXL_PIN_SPI_SLAVE_READY | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+     CC1310_LAUNCHXL_PIN_SPI_SLAVE_DATA_ON | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+     PIN_TERMINATE
+};
 
 SPI_Buffer  rxBuffer;
 SPI_Buffer  txBuffer;
@@ -105,6 +116,12 @@ void *slaveThread(void *arg0)
      */
     GPIO_setConfig(Board_SPI_SLAVE_READY, GPIO_CFG_OUTPUT | GPIO_CFG_OUT_HIGH);
     GPIO_setConfig(Board_SPI_MASTER_READY, GPIO_CFG_INPUT);
+    /* Open LED pins */
+//    slaveStatusHandle = PIN_open(&slaveStatusState, slaveStatusTable);
+//    if (!slaveStatusHandle)
+    {
+//        System_abort("Error initializing board 3.3V domain pins\n");
+    }
 
     /*
      * Handshake - Set Board_SPI_SLAVE_READY high to indicate slave is ready
@@ -174,51 +191,116 @@ void *slaveThread(void *arg0)
         transferOK = SPI_transfer(slaveSpi, &transaction);
         if (transferOK)
         {
-            while(GPIO_read(Board_SPI_MASTER_READY))
-            {
-                CPUdelay(10);
-            }
+//            while(GPIO_read(Board_SPI_MASTER_READY))
+//            {
+//                CPUdelay(10);
+//            }
 
             Trace_printf(hDisplaySerial, "Waiting transfer");
+//            PIN_setOutputValue(slaveStatusHandle, CC1310_LAUNCHXL_PIN_SPI_SLAVE_READY, 0);
             GPIO_write(Board_SPI_SLAVE_READY, 0);
 
            /* Wait until transfer has completed */
             sem_wait(&slaveSem);
 
-            while(!GPIO_read(Board_SPI_MASTER_READY))
-            {
-                CPUdelay(10);
-            }
+//            while(!GPIO_read(Board_SPI_MASTER_READY))
+//            {
+//                CPUdelay(10);
+//            }
 
+//            PIN_setOutputValue(slaveStatusHandle, CC1310_LAUNCHXL_PIN_SPI_SLAVE_READY, 1);
             GPIO_write(Board_SPI_SLAVE_READY, 1);
             if (SPI_isValidFrame(&rxBuffer.frame))
             {
-                if (rxBuffer.frame.cmd == 0x81)
+                memset(txBuffer.raw, 0, sizeof(txBuffer.raw));
+
+                switch(rxBuffer.frame.cmd)
                 {
-                    NodeTask_testTransferStart();
-                }
-                else if (rxBuffer.frame.cmd == 0x82)
-                {
-                    NodeTask_testTransferStop();
-                }
-                else if (rxBuffer.frame.cmd == 0x83)
-                {
-                    NodeTask_motionDetectionStart();
-                }
-                else if (rxBuffer.frame.cmd == 0x84)
-                {
-                    NodeTask_motionDetectionStop();
-                }
-                else if (rxBuffer.frame.cmd == 0x01)
-                {
-                    if (!NodeTask_postTransfer(rxBuffer.frame.payload, rxBuffer.frame.len))
+                case    RF_SPI_CMD_GET_CONFIG:
                     {
-                        Trace_printf(hDisplaySerial, "Data Tranfer Failed!");
+                        Trace_printf(hDisplaySerial, "Request get RF config!");
+
+                        NODETASK_RF_CONFIG   config;
+
+                        NodeTask_getConfig(&config);
+
+                        txBuffer.frame.cmd = rxBuffer.frame.cmd;
+                        txBuffer.frame.len = sizeof(NODETASK_RF_CONFIG);
+                        memcpy(txBuffer.frame.payload, &config, sizeof(NODETASK_RF_CONFIG));
+                        txBuffer.frame.crc =   CRC16_calc(txBuffer.frame.payload, txBuffer.frame.len);
                     }
-                }
-                else if (rxBuffer.frame.cmd != 0x00)
-                {
-                    Trace_printf(hDisplaySerial, "Unknown ata received : cmd - %d, len = %d", rxBuffer.frame.cmd, rxBuffer.frame.len);
+                    break;
+
+                case    RF_SPI_CMD_SET_CONFIG:
+                    {
+                        Trace_printf(hDisplaySerial, "Request set RF config!");
+
+                        if (rxBuffer.frame.len == sizeof(NODETASK_RF_CONFIG))
+                        {
+                            if (NodeTask_setConfig((NODETASK_RF_CONFIG *)rxBuffer.frame.payload))
+                            {
+                                NODETASK_RF_CONFIG   config;
+
+                                NodeTask_getConfig(&config);
+
+                                txBuffer.frame.cmd = rxBuffer.frame.cmd;
+                                txBuffer.frame.len = sizeof(NODETASK_RF_CONFIG);
+                                memcpy(txBuffer.frame.payload, &config, sizeof(NODETASK_RF_CONFIG));
+                                txBuffer.frame.crc =   CRC16_calc(txBuffer.frame.payload, txBuffer.frame.len);
+                            }
+                            else
+                            {
+                                txBuffer.frame.cmd = rxBuffer.frame.cmd;
+                                txBuffer.frame.len = 1;
+                                txBuffer.frame.payload[0] = 1;
+                                txBuffer.frame.crc =   CRC16_calc(txBuffer.frame.payload, txBuffer.frame.len);
+                            }
+                        }
+                    }
+                    break;
+
+                case    RF_SPI_CMD_START_AUTO_TRANSFER:
+                    {
+                        NodeTask_testTransferStart();
+                    }
+                    break;
+
+                case    RF_SPI_CMD_STOP_AUTO_TRANSFER:
+                    {
+                        NodeTask_testTransferStop();
+                    }
+                    break;
+
+                case    RF_SPI_CMD_START_MOTION_DETECTION:
+                    {
+                        NodeTask_motionDetectionStart();
+                    }
+                    break;
+
+                case    RF_SPI_CMD_STOP_MOTION_DETECTION:
+                    {
+                        NodeTask_motionDetectionStop();
+                    }
+                    break;
+
+                case    RF_SPI_CMD_DATA_TRANSFER:
+                    {
+                        if (!NodeTask_postTransfer(rxBuffer.frame.payload, rxBuffer.frame.len))
+                        {
+                            Trace_printf(hDisplaySerial, "Data Tranfer Failed!");
+                        }
+                    }
+                    break;
+
+                case    RF_SPI_CMD_DUMMY:
+                    {
+                    }
+                    break;
+
+                default:
+                    {
+                        Trace_printf(hDisplaySerial, "Unknown ata received : cmd - %d, len = %d", rxBuffer.frame.cmd, rxBuffer.frame.len);
+                    }
                 }
             }
         }

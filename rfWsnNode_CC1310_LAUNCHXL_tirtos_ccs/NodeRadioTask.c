@@ -167,7 +167,6 @@ static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
      * the below API
      * EasyLink_setFrequency(868000000);
      */
-
     /* Use the True Random Number Generator to generate sensor node address randomly */;
     Power_setDependency(PowerCC26XX_PERIPH_TRNG);
     TRNGEnable();
