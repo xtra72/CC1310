@@ -75,8 +75,8 @@
 #define NODE_EVENT_WAKEUP               (uint32_t)(1 << 8)
 #define NODE_EVENT_SLEEP                (uint32_t)(1 << 9)
 
-//#define NODE_ACTIVITY_LED           Board_PIN_LED0
-//#define NODE_MESSAGE_QUEUE_FULL_LED Board_PIN_LED1
+#define NODE_ACTIVITY_LED           Board_PIN_LED0
+#define NODE_MESSAGE_QUEUE_FULL_LED Board_PIN_LED1
 
 
 /***** Variable declarations *****/
@@ -99,7 +99,6 @@ static Clock_Handle messageTimeoutClockHandle;
 //static Clock_Handle motionDetectionTimeoutClockHandle;
 
 /* Pin driver handle */
-#if 0
 static PIN_Handle ledPinHandle;
 static PIN_State ledPinState;
 PIN_Config ledPinTable[] =
@@ -123,7 +122,6 @@ PIN_Config buttonPinTable[] =
 //    Board_PIN_BUTTON1  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE,
     PIN_TERMINATE
 };
-#endif
 /* Display driver handles */
 Display_Handle hDisplaySerial;
 
@@ -233,7 +231,7 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
     {
         Trace_printf(hDisplaySerial, "Waiting for SCE ADC reading...");
     }
-#if 0
+
     /* Open LED pins */
     ledPinHandle = PIN_open(&ledPinState, ledPinTable);
     if (!ledPinHandle)
@@ -258,7 +256,6 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
     {
         System_abort("Error registering button callback function");
     }
-#endif
 
 //    Clock_start(motionDetectionTimeoutClockHandle);
 
@@ -292,10 +289,8 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
             uint32_t    currentTransferTime;
             /* Toggle activity LED */
 
-#if 0
 #if !defined Board_CC1350STK
             PIN_setOutputValue(ledPinHandle, NODE_ACTIVITY_LED,!PIN_getOutputValue(NODE_ACTIVITY_LED));
-#endif
 #endif
             currentTransferTime = (Clock_getTicks() * Clock_tickPeriod) / 1000000;
 
@@ -329,11 +324,10 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
             {
                 uint32_t    currentTransferTime;
 
-#if 0
                 #if !defined Board_CC1350STK
                             PIN_setOutputValue(ledPinHandle, NODE_ACTIVITY_LED,!PIN_getOutputValue(NODE_ACTIVITY_LED));
                 #endif
-#endif
+
                 uint32_t    length = 0;
                 if (DataQ_front(rawData, sizeof(rawData), &length))
                 {
@@ -344,13 +338,41 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
 
                     currentTransferTime = (Clock_getTicks() * Clock_tickPeriod) / 1000;
 
-                    DataQ_pop(NULL, 0, &length);
-#if 0
                     if (NodeRadioTask_sendRawData(rawData, length) == NodeRadioStatus_Success)
                     {
-//                        DataQ_pop(NULL, 0, &length);
+                        DataQ_pop(NULL, 0, &length);
                         transferSuccessCount++;
                         totalTransferSuccessCount++;
+#if 0
+                        uint32_t    i;
+                        static  char buffer[256] = {0,};
+                         for(i = 0 ; i < length ; i++)
+                         {
+                             uint8_t hi = (rawData[i] >> 4) & 0x0F;
+                             uint8_t lo = (rawData[i]     ) & 0x0F;
+                             if (hi < 10)
+                             {
+                                 buffer[i*2] ='0' + hi;
+                             }
+                             else
+                             {
+                                 buffer[i*2] ='A' + hi - 10;
+                             }
+
+                             if (lo < 10)
+                             {
+                                 buffer[i*2 + 1] ='0' + lo;
+                             }
+                             else
+                             {
+                                 buffer[i*2 + 1] ='A' + lo - 10;
+                             }
+                         }
+
+                         buffer[i*2]= 0;
+
+                         Display_printf(hDisplaySerial, 0, 0, "AT+RCVD: %4d.%03d %d, %s", currentTransferTime / 1000,currentTransferTime % 1000, length, buffer);
+#endif
                     }
                     else
                     {
@@ -359,7 +381,6 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
                         index = ((uint32_t)rawData[0] << 24) | ((uint32_t)rawData[1] << 16) | ((uint32_t)rawData[2] << 8) | (uint32_t)rawData[3];
                         Display_printf(hDisplaySerial, 0, 0, "Transfer error : %8x", index);
                     }
-#endif
                 }
 
                 if (currentTransferTime / 1000 != previousTransferTime / 1000)
@@ -383,10 +404,8 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         if( events & NODE_EVENT_OVERRUN_DETECTED)
         {
             overrun = true;
-#if 0
 #if !defined Board_CC1350STK
             PIN_setOutputValue(ledPinHandle, NODE_MESSAGE_QUEUE_FULL_LED, 1);
-#endif
 #endif
             if (Clock_isActive(messageTimeoutClockHandle))
             {
@@ -398,10 +417,8 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         else if( events & NODE_EVENT_OVERRUN_RELEASED)
         {
             overrun = false;
-#if 0
 #if !defined Board_CC1350STK
             PIN_setOutputValue(ledPinHandle, NODE_MESSAGE_QUEUE_FULL_LED, 0);
-#endif
 #endif
             if (Clock_isActive(messageTimeoutClockHandle))
             {

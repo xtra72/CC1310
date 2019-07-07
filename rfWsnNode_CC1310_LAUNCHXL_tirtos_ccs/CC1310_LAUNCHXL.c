@@ -426,6 +426,7 @@ DisplayUart_Object     displayUartObject;
 DisplaySharp_Object    displaySharpObject;
 
 static char uartStringBuf[BOARD_DISPLAY_UART_STRBUF_SIZE];
+static uint_least8_t sharpDisplayBuf[BOARD_DISPLAY_SHARP_SIZE * BOARD_DISPLAY_SHARP_SIZE / 8];
 
 const DisplayUart_HWAttrs displayUartHWAttrs = {
     .uartIdx      = CC1310_LAUNCHXL_UART0,
@@ -436,8 +437,6 @@ const DisplayUart_HWAttrs displayUartHWAttrs = {
 };
 
 #if 0
-static uint_least8_t sharpDisplayBuf[BOARD_DISPLAY_SHARP_SIZE * BOARD_DISPLAY_SHARP_SIZE / 8];
-
 const DisplaySharp_HWAttrsV1 displaySharpHWattrs = {
     .spiIndex    = CC1310_LAUNCHXL_SPI0,
     .csPin       = CC1310_LAUNCHXL_GPIO_LCD_CS,
@@ -765,9 +764,9 @@ const uint_least8_t NVS_count = CC1310_LAUNCHXL_NVSCOUNT;
 
 const PIN_Config BoardGpioInitTable[] = {
 
-    CC1310_LAUNCHXL_PIN_SPI_SLAVE_READY | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MIN,       /* LED initially off          */
+    CC1310_LAUNCHXL_PIN_SPI_SLAVE_READY | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,       /* LED initially off          */
     CC1310_LAUNCHXL_PIN_SPI_MASTER_READY | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_BOTHEDGES | PIN_HYSTERESIS,          /* Button is active low       */
-    CC1310_LAUNCHXL_PIN_SPI_SLAVE_DATA_ON | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MIN,          /* Button is active low       */
+    CC1310_LAUNCHXL_PIN_SPI_SLAVE_DATA_ON | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,          /* Button is active low       */
     CC1310_LAUNCHXL_PIN_WAKEUP | PIN_INPUT_EN | PIN_PULLDOWN | PIN_IRQ_BOTHEDGES | PIN_HYSTERESIS,       /* Wakeup */
     //CC1310_LAUNCHXL_PIN_BTN2 | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_BOTHEDGES | PIN_HYSTERESIS,          /* Button is active low       */
     CC1310_LAUNCHXL_SPI_FLASH_CS | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MIN,  /* External flash chip select */
