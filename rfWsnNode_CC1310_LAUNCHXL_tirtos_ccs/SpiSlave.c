@@ -30,7 +30,7 @@
 #include "rf.h"
 #define THREADSTACKSIZE (1024)
 
-#define SPI_MSG_LENGTH  (60)
+#define SPI_MSG_LENGTH  (80)
 #define MAX_LOOP        (10)
 
 typedef struct
@@ -52,6 +52,7 @@ bool SPI_isValidFrame(SPI_Frame* frame);
 extern  Display_Handle hDisplaySerial;
 
 /* Pin driver handle */
+#if 0
 static PIN_Handle slaveStatusHandle;
 static PIN_State slaveStatusState;
 PIN_Config slaveStatusTable[] =
@@ -60,13 +61,15 @@ PIN_Config slaveStatusTable[] =
      CC1310_LAUNCHXL_PIN_SPI_SLAVE_DATA_ON | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
      PIN_TERMINATE
 };
+#endif
 
 SPI_Buffer  rxBuffer;
 SPI_Buffer  txBuffer;
 
 /* Semaphore to block slave until transfer is complete */
-sem_t slaveSem;
+static  sem_t slaveSem;
 
+static  bool    stop_ = true;
 /*
  *  ======== transferCompleteFxn ========
  *  Callback function for SPI_transfer().
@@ -117,12 +120,13 @@ void *slaveThread(void *arg0)
     GPIO_setConfig(Board_SPI_SLAVE_READY, GPIO_CFG_OUTPUT | GPIO_CFG_OUT_HIGH);
     GPIO_setConfig(Board_SPI_MASTER_READY, GPIO_CFG_INPUT);
     /* Open LED pins */
-//    slaveStatusHandle = PIN_open(&slaveStatusState, slaveStatusTable);
-//    if (!slaveStatusHandle)
+#if 0
+    slaveStatusHandle = PIN_open(&slaveStatusState, slaveStatusTable);
+    if (!slaveStatusHandle)
     {
-//        System_abort("Error initializing board 3.3V domain pins\n");
+        System_abort("Error initializing board 3.3V domain pins\n");
     }
-
+#endif
     /*
      * Handshake - Set Board_SPI_SLAVE_READY high to indicate slave is ready
      * to run.  Wait for Board_SPI_MASTER_READY to be high.
@@ -181,7 +185,9 @@ void *slaveThread(void *arg0)
     /* Copy message to transmit buffer */
 
     memset(txBuffer.raw, 0, sizeof(txBuffer));
-    while(1)
+
+    stop_ = false;
+    while(!stop_)
     {
         /* Initialize slave SPI transaction structure */
         transaction.count = sizeof(txBuffer);
@@ -220,13 +226,13 @@ void *slaveThread(void *arg0)
                     {
                         Trace_printf(hDisplaySerial, "Request get RF config!");
 
-                        NODETASK_RF_CONFIG   config;
+                        NODETASK_CONFIG   config;
 
                         NodeTask_getConfig(&config);
 
                         txBuffer.frame.cmd = rxBuffer.frame.cmd;
-                        txBuffer.frame.len = sizeof(NODETASK_RF_CONFIG);
-                        memcpy(txBuffer.frame.payload, &config, sizeof(NODETASK_RF_CONFIG));
+                        txBuffer.frame.len = sizeof(NODETASK_CONFIG);
+                        memcpy(txBuffer.frame.payload, &config, sizeof(NODETASK_CONFIG));
                         txBuffer.frame.crc =   CRC16_calc(txBuffer.frame.payload, txBuffer.frame.len);
                     }
                     break;
@@ -235,17 +241,17 @@ void *slaveThread(void *arg0)
                     {
                         Trace_printf(hDisplaySerial, "Request set RF config!");
 
-                        if (rxBuffer.frame.len == sizeof(NODETASK_RF_CONFIG))
+                        if (rxBuffer.frame.len == sizeof(NODETASK_CONFIG))
                         {
-                            if (NodeTask_setConfig((NODETASK_RF_CONFIG *)rxBuffer.frame.payload))
+                            if (NodeTask_setConfig((NODETASK_CONFIG *)rxBuffer.frame.payload))
                             {
-                                NODETASK_RF_CONFIG   config;
+                                NODETASK_CONFIG   config;
 
                                 NodeTask_getConfig(&config);
 
                                 txBuffer.frame.cmd = rxBuffer.frame.cmd;
-                                txBuffer.frame.len = sizeof(NODETASK_RF_CONFIG);
-                                memcpy(txBuffer.frame.payload, &config, sizeof(NODETASK_RF_CONFIG));
+                                txBuffer.frame.len = sizeof(NODETASK_CONFIG);
+                                memcpy(txBuffer.frame.payload, &config, sizeof(NODETASK_CONFIG));
                                 txBuffer.frame.crc =   CRC16_calc(txBuffer.frame.payload, txBuffer.frame.len);
                             }
                             else
@@ -302,6 +308,10 @@ void *slaveThread(void *arg0)
                         Trace_printf(hDisplaySerial, "Unknown ata received : cmd - %d, len = %d", rxBuffer.frame.cmd, rxBuffer.frame.len);
                     }
                 }
+            }
+            else
+            {
+                Trace_printf(hDisplaySerial, "Invalid frame");
             }
         }
         else

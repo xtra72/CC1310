@@ -121,6 +121,16 @@ struct  TestConfig
     uint8_t     loopCount;
 };
 
+static  NODETASK_CONFIG config_ =
+{
+     .shortAddress = 0x0002,
+     .power = 14,
+     .frequency = 92200000,
+     .maxPayloadLength= 60,
+     .timeout = 5000
+
+};
+
 static  struct TestConfig   testConfigs[5] =
 {
  {  .dataLength = 4 + 16 * 1, .period = 2,  .loopCount = 100  },
@@ -618,7 +628,7 @@ void    NodeTask_eventPostTransfer(void)
 
 }
 
-void    NodeTask_getRFStatus(NODETASK_RF_STATUS* status)
+void    NodeTask_getRFStatus(NODETASK_STATUS* status)
 {
     status->frequency = EasyLink_getFrequency();
     EasyLink_getRfPower(&status->power);
@@ -626,13 +636,13 @@ void    NodeTask_getRFStatus(NODETASK_RF_STATUS* status)
 }
 
 
-void    NodeTask_getConfig(NODETASK_RF_CONFIG* config)
+void    NodeTask_getConfig(NODETASK_CONFIG* config)
 {
     config->frequency = EasyLink_getFrequency();
 }
 
 
-bool    NodeTask_setConfig(NODETASK_RF_CONFIG* config)
+bool    NodeTask_setConfig(NODETASK_CONFIG* config)
 {
     EasyLink_setFrequency(config->frequency);
 

@@ -40,18 +40,18 @@
 typedef struct
 {
     uint16_t    shortAddress;
-    uint16_t    power;
+    int16_t     power;
     uint32_t    frequency;
     uint32_t    maxPayloadLength;
     uint32_t    timeout;
-}   NODETASK_RF_CONFIG;
+}   NODETASK_CONFIG;
 
 typedef struct
 {
     uint32_t    frequency;
     int8_t      power;
     int8_t      rssi;
-}   NODETASK_RF_STATUS;
+}   NODETASK_STATUS;
 
 /* Initializes the Node Task and creates all TI-RTOS objects */
 void NodeTask_init(void);
@@ -68,9 +68,9 @@ void NodeTask_motionDetectionStop(void);
 
 void NodeTask_wakeup(void);
 
-void    NodeTask_getConfig(NODETASK_RF_CONFIG* config);
-bool    NodeTask_setConfig(NODETASK_RF_CONFIG* config);
+void    NodeTask_getConfig(NODETASK_CONFIG* config);
+bool    NodeTask_setConfig(NODETASK_CONFIG* config);
 
-void    NodeTask_getRFStatus(NODETASK_RF_STATUS* status);
+void    NodeTask_getRFStatus(NODETASK_STATUS* status);
 
 #endif /* TASKS_NODETASK_H_ */
