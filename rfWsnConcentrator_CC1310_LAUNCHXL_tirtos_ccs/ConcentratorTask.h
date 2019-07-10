@@ -47,7 +47,12 @@
 #ifndef TASKS_CONCENTRATORTASK_H_
 #define TASKS_CONCENTRATORTASK_H_
 
+#define CONCENTRATOR_COMMAND_DEVICE_STOP    0
+#define CONCENTRATOR_COMMAND_DEVICE_START   1
+
 /* Create the ConcentratorRadioTask and creates all TI-RTOS objects */
 void ConcentratorTask_init(void);
+
+bool ConcentratorTask_sendCommand(uint16_t _device_id, uint8_t cmd);
 
 #endif /* TASKS_CONCENTRATORTASK_H_ */

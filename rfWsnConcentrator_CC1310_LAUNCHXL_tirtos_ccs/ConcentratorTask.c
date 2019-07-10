@@ -123,8 +123,8 @@ static struct AdcSensorNode latestActiveAdcSensorNode;
 static struct RawDataNode   latestRawDataNode;
 struct AdcSensorNode knownSensorNodes[CONCENTRATOR_MAX_NODES];
 static struct AdcSensorNode* lastAddedSensorNode = knownSensorNodes;
-static Display_Handle hDisplaySerial;
 
+static DataQ        dataQ_;
 static  uint32_t    previousReceivedTime = 0;
 
 static  uint32_t    receivedPacket = 0;
@@ -152,12 +152,12 @@ static Clock_Handle ledBlinkClockHandle;
 static uint8_t ledBlinkCnt;
 
 /***** Prototypes *****/
-static void concentratorTaskFunction(UArg arg0, UArg arg1);
-static void packetReceivedCallback(union ConcentratorPacket* packet, int8_t rssi);
-static void addNewNode(struct AdcSensorNode* node);
-static void updateNode(struct AdcSensorNode* node);
-static uint8_t isKnownNodeAddress(uint8_t address);
-static void ledBlinkClockCb(UArg arg0);
+static void ConcentratorTask_main(UArg arg0, UArg arg1);
+static void ConcentratorTask_packetReceivedCallback(union ConcentratorPacket* packet, int8_t rssi);
+static void ConcentratorTask_addNewNode(struct AdcSensorNode* node);
+static void ConcentratorTask_updateNode(struct AdcSensorNode* node);
+static uint8_t ConcentratorTask_isKnownNodeAddress(uint8_t address);
+static void ConcentratorTask_ledBlinkClockCb(UArg arg0);
 
 /***** Function definitions *****/
 void ConcentratorTask_init(void)
@@ -174,7 +174,7 @@ void ConcentratorTask_init(void)
     concentratorTaskParams.stackSize = CONCENTRATOR_TASK_STACK_SIZE;
     concentratorTaskParams.priority = CONCENTRATOR_TASK_PRIORITY;
     concentratorTaskParams.stack = &concentratorTaskStack;
-    Task_construct(&concentratorTask, concentratorTaskFunction, &concentratorTaskParams, NULL);
+    Task_construct(&concentratorTask, ConcentratorTask_main, &concentratorTaskParams, NULL);
 
     /* Open Identify LED pin */
     identifyLedPinHandle = PIN_open(&identifyLedPinState, identifyLedPinTable);
@@ -188,31 +188,20 @@ void ConcentratorTask_init(void)
     Clock_Params_init(&clkParams);
 
     clkParams.startFlag = FALSE;
-    Clock_construct(&ledBlinkClock, ledBlinkClockCb, 1, &clkParams);
+    Clock_construct(&ledBlinkClock, ConcentratorTask_ledBlinkClockCb, 1, &clkParams);
     ledBlinkClockHandle = Clock_handle(&ledBlinkClock);
 
     ledBlinkCnt = 0;
 }
 
-static void concentratorTaskFunction(UArg arg0, UArg arg1)
+static void ConcentratorTask_main(UArg arg0, UArg arg1)
 {
-    /* Initialize display and try to open UART types of display. */
-    Display_Params params;
-    Display_Params_init(&params);
-    params.lineClearMode = DISPLAY_CLEAR_BOTH;
+    Trace_printf("Starting Concentrator ...\n");
 
-    hDisplaySerial = Display_open(Display_Type_UART, &params);
-
-    /* Check if the selected Display type was found and successfully opened */
-    if (hDisplaySerial)
-    {
-        Trace_printf(hDisplaySerial, "Waiting for nodes...");
-    }
-
-    DataQ_init(0);
+    DataQ_init(&dataQ_, 8);
 
     /* Register a packet received callback with the radio task */
-    ConcentratorRadioTask_registerPacketReceivedCallback(packetReceivedCallback);
+    ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorTask_packetReceivedCallback);
 
     /* Enter main task loop */
     while(1)
@@ -228,14 +217,14 @@ static void concentratorTaskFunction(UArg arg0, UArg arg1)
             uint32_t    i;
 
             /* If we knew this node from before, update the value */
-            if(isKnownNodeAddress(latestActiveAdcSensorNode.address))
+            if(ConcentratorTask_isKnownNodeAddress(latestActiveAdcSensorNode.address))
             {
-                updateNode(&latestActiveAdcSensorNode);
+                ConcentratorTask_updateNode(&latestActiveAdcSensorNode);
             }
             else
             {
                 /* Else add it */
-                addNewNode(&latestActiveAdcSensorNode);
+                ConcentratorTask_addNewNode(&latestActiveAdcSensorNode);
             }
 
             receivedPacket++;
@@ -271,20 +260,20 @@ static void concentratorTaskFunction(UArg arg0, UArg arg1)
 
             buffer[i*2]= 0;
 
-            Trace_printf(hDisplaySerial, "AT+RCVD: %4d.%03d, %d, %s", latestRawDataNode.time / 1000, latestRawDataNode.time % 1000, latestRawDataNode.length, buffer);
+            Trace_printf("AT+RCVD: %4d.%03d, %d, %s", latestRawDataNode.time / 1000, latestRawDataNode.time % 1000, latestRawDataNode.length, buffer);
 
         }
         else if(events & CONCENTRATOR_EVENT_TEST_RESET)
         {
             /* If we knew this node from before, update the value */
-            if(isKnownNodeAddress(latestActiveAdcSensorNode.address))
+            if(ConcentratorTask_isKnownNodeAddress(latestActiveAdcSensorNode.address))
             {
-                updateNode(&latestActiveAdcSensorNode);
+                ConcentratorTask_updateNode(&latestActiveAdcSensorNode);
             }
             else
             {
                 /* Else add it */
-                addNewNode(&latestActiveAdcSensorNode);
+                ConcentratorTask_addNewNode(&latestActiveAdcSensorNode);
             }
 
             receivedPacket = 0;
@@ -305,7 +294,7 @@ static void concentratorTaskFunction(UArg arg0, UArg arg1)
         if (currentReceivedTime != previousReceivedTime)
         {
             //clear screen, put cuser to beggining of terminal and print the header
-            Trace_printf(hDisplaySerial, "%8d %8d %8d %3d %8d %8d %8d %3d",
+            Trace_printf("%8d %8d %8d %3d %8d %8d %8d %3d",
                            receivedDataSize, successfullyReceivedPacket, receivedPacket, successfullyReceivedPacket * 100 / receivedPacket,
                            totalReceivedDataSize, totalSuccessfullyReceivedPacket, totalReceivedPacket, totalSuccessfullyReceivedPacket * 100 / totalReceivedPacket);
             receivedPacket =  0;
@@ -317,7 +306,7 @@ static void concentratorTaskFunction(UArg arg0, UArg arg1)
     }
 }
 
-static void packetReceivedCallback(union ConcentratorPacket* packet, int8_t rssi)
+static void ConcentratorTask_packetReceivedCallback(union ConcentratorPacket* packet, int8_t rssi)
 {
     /* If we recived an ADC sensor packet, for backward compatibility */
     if(packet->header.packetType == RADIO_PACKET_TYPE_RAW_DATA_PACKET)
@@ -329,7 +318,7 @@ static void packetReceivedCallback(union ConcentratorPacket* packet, int8_t rssi
         memcpy(latestRawDataNode.data, packet->rawDataPacket.data, latestRawDataNode.length);
         latestRawDataNode.latestRssi = rssi;
 
-        DataQ_push(packet->rawDataPacket.data, packet->header.length);
+        DataQ_push(&dataQ_, packet->rawDataPacket.data, packet->header.length);
 
         Event_post(concentratorEventHandle, CONCENTRATOR_EVENT_NEW_RAW_DATA);
     }
@@ -344,7 +333,7 @@ static void packetReceivedCallback(union ConcentratorPacket* packet, int8_t rssi
     }
 }
 
-static uint8_t isKnownNodeAddress(uint8_t address)
+static uint8_t ConcentratorTask_isKnownNodeAddress(uint8_t address)
 {
     uint8_t found = 0;
     uint8_t i;
@@ -359,7 +348,7 @@ static uint8_t isKnownNodeAddress(uint8_t address)
     return found;
 }
 
-static void updateNode(struct AdcSensorNode* node)
+static void ConcentratorTask_updateNode(struct AdcSensorNode* node)
 {
     uint8_t i;
     for (i = 0; i < CONCENTRATOR_MAX_NODES; i++) {
@@ -373,7 +362,7 @@ static void updateNode(struct AdcSensorNode* node)
     }
 }
 
-static void addNewNode(struct AdcSensorNode* node)
+static void ConcentratorTask_addNewNode(struct AdcSensorNode* node)
 {
     *lastAddedSensorNode = *node;
 
@@ -385,7 +374,7 @@ static void addNewNode(struct AdcSensorNode* node)
     }
 }
 
-static void ledBlinkClockCb(UArg arg0)
+static void ConcentratorTask_ledBlinkClockCb(UArg arg0)
 {
     if(ledBlinkCnt < CONCENTRATOR_LED_BLINK_TIMES)
     {
@@ -423,4 +412,9 @@ static void ledBlinkClockCb(UArg arg0)
         PIN_setOutputValue(identifyLedPinHandle, CONCENTRATOR_IDENTIFY_LED, 0);
         ledBlinkCnt = 0;
     }
+}
+
+bool ConcentratorTask_sendCommand(uint16_t _device_id, uint8_t cmd)
+{
+    return  true;
 }

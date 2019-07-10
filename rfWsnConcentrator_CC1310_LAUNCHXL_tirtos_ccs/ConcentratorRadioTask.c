@@ -69,6 +69,7 @@
 
 /* Application Header files */ 
 #include "RadioProtocol.h"
+#include "DataQueue.h"
 #include "crc16.h"
 
 /***** Defines *****/
@@ -78,6 +79,7 @@
 #define RADIO_EVENT_ALL                  0xFFFFFFFF
 #define RADIO_EVENT_VALID_PACKET_RECEIVED      (uint32_t)(1 << 0)
 #define RADIO_EVENT_INVALID_PACKET_RECEIVED (uint32_t)(1 << 1)
+#define RADIO_EVENT_SEND_PACKET_READY       (uint32_t)(2 << 0)
 
 #define CONCENTRATORRADIO_MAX_RETRIES 2
 
@@ -108,10 +110,15 @@ static int8_t latestRssi;
 
 
 /***** Prototypes *****/
-static void concentratorRadioTaskFunction(UArg arg0, UArg arg1);
-static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status);
-static void notifyPacketReceived(union ConcentratorPacket* latestRxPacket);
-static void sendAck(uint8_t latestSourceAddress);
+static void concentratorRadioTask_main(UArg arg0, UArg arg1);
+static void ConcentratorRadioTask_rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status);
+static void ConcentratorRadioTask_notifyPacketReceived(union ConcentratorPacket* latestRxPacket);
+static bool ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint8_t* _payload, uint32_t _len, uint32_t _timeout);
+static bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t _timeout);
+static bool ConsentratorRadioTask_sendPacket(EasyLink_TxPacket* _packetAddress, uint32_t _timeout);
+
+static  Semaphore_Struct    sendSem;  /* not static so you can see in ROV */
+static  Semaphore_Handle    sendSemHandle;
 
 /* Pin driver handle */
 static PIN_Handle ledPinHandle;
@@ -139,19 +146,24 @@ void ConcentratorRadioTask_init(void) {
     Event_construct(&radioOperationEvent, &eventParam);
     radioOperationEventHandle = Event_handle(&radioOperationEvent);
 
+    Semaphore_Params semParam;
+    Semaphore_Params_init(&semParam);
+    Semaphore_construct(&sendSem, 1, &semParam);
+    sendSemHandle = Semaphore_handle(&sendSem);
+
     /* Create the concentrator radio protocol task */
     Task_Params_init(&concentratorRadioTaskParams);
     concentratorRadioTaskParams.stackSize = CONCENTRATORRADIO_TASK_STACK_SIZE;
     concentratorRadioTaskParams.priority = CONCENTRATORRADIO_TASK_PRIORITY;
     concentratorRadioTaskParams.stack = &concentratorRadioTaskStack;
-    Task_construct(&concentratorRadioTask, concentratorRadioTaskFunction, &concentratorRadioTaskParams, NULL);
+    Task_construct(&concentratorRadioTask, concentratorRadioTask_main, &concentratorRadioTaskParams, NULL);
 }
 
 void ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorRadio_PacketReceivedCallback callback) {
     packetReceivedCallback = callback;
 }
 
-static void concentratorRadioTaskFunction(UArg arg0, UArg arg1)
+static void concentratorRadioTask_main(UArg arg0, UArg arg1)
 {
     // Initialize the EasyLink parameters to their default values
 	EasyLink_Params easyLink_params;
@@ -181,7 +193,7 @@ static void concentratorRadioTaskFunction(UArg arg0, UArg arg1)
     ackPacket.header.packetType = RADIO_PACKET_TYPE_ACK_PACKET;
 
     /* Enter receive */
-    if(EasyLink_receiveAsync(rxDoneCallback, 0) != EasyLink_Status_Success) {
+    if(EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0) != EasyLink_Status_Success) {
         System_abort("EasyLink_receiveAsync failed");
     }
 
@@ -192,13 +204,13 @@ static void concentratorRadioTaskFunction(UArg arg0, UArg arg1)
         if(events & RADIO_EVENT_VALID_PACKET_RECEIVED) {
 
             /* Send ack packet */
-            sendAck(latestRxPacket.header.sourceAddress);
+            ConsentratorRadioTask_sendAck(latestRxPacket.header.sourceAddress, BIOS_WAIT_FOREVER);
 
             /* Call packet received callback */
-            notifyPacketReceived(&latestRxPacket);
+            ConcentratorRadioTask_notifyPacketReceived(&latestRxPacket);
 
             /* Go back to RX */
-            if(EasyLink_receiveAsync(rxDoneCallback, 0) != EasyLink_Status_Success) {
+            if(EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0) != EasyLink_Status_Success) {
                 System_abort("EasyLink_receiveAsync failed");
             }
 
@@ -210,14 +222,53 @@ static void concentratorRadioTaskFunction(UArg arg0, UArg arg1)
         /* If invalid packet received */
         if(events & RADIO_EVENT_INVALID_PACKET_RECEIVED) {
             /* Go back to RX */
-            if(EasyLink_receiveAsync(rxDoneCallback, 0) != EasyLink_Status_Success) {
+            if(EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0) != EasyLink_Status_Success) {
                 System_abort("EasyLink_receiveAsync failed");
             }
+        }
+
+        if(events & RADIO_EVENT_SEND_PACKET_READY)
+        {
+         //   ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint8_t* _payload, uint32_t _len, BIOS_WAIT_FOREVER)
         }
     }
 }
 
-static void sendAck(uint8_t latestSourceAddress) {
+
+static bool ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint8_t* _payload, uint32_t _len, uint32_t _timeout)
+{
+    uint32_t absTime;
+
+    /* Set destinationAdress, but use EasyLink layers destination adress capability */
+    txPacket.dstAddr[0] = _destAddr;
+
+    /* Copy ACK packet to payload, skipping the destination adress byte.
+     * Note that the EasyLink API will implcitily both add the length byte and the destination address byte. */
+    union ConcentratorPacket   *packet = (union ConcentratorPacket *)txPacket.payload;
+    packet->header.sourceAddress = _srcAddr;
+    packet->header.packetType = RADIO_PACKET_TYPE_RAW_DATA_PACKET;
+    packet->header.options = RADIO_PACKET_OPTIONS_CRC;
+    packet->header.length = _len;
+
+    memcpy(packet->rawDataPacket.data, _payload, _len);
+    txPacket.len = sizeof(struct PacketHeader) + sizeof(uint16_t) + _len;
+
+    if(EasyLink_getAbsTime(&absTime) != EasyLink_Status_Success)
+    {
+        // Problem getting absolute time
+        // Still send ACK
+        txPacket.absTime = 0;
+    }
+    else
+    {
+        txPacket.absTime = absTime + EasyLink_us_To_RadioTime(CONCENTRATORRADIO_ACK_DELAY);
+    }
+
+    return  ConsentratorRadioTask_sendPacket(&txPacket, _timeout);
+}
+
+static bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t _timeout)
+{
 	uint32_t absTime;
 
     /* Set destinationAdress, but use EasyLink layers destination adress capability */
@@ -239,14 +290,27 @@ static void sendAck(uint8_t latestSourceAddress) {
 		txPacket.absTime = absTime + EasyLink_us_To_RadioTime(CONCENTRATORRADIO_ACK_DELAY);
 	}
 
-    /* Send packet  */
-    if (EasyLink_transmit(&txPacket) != EasyLink_Status_Success)
-    {
-        System_abort("EasyLink_transmit failed");
-    }
+	return  ConsentratorRadioTask_sendPacket(&txPacket, _timeout);
 }
 
-static void notifyPacketReceived(union ConcentratorPacket* latestRxPacket)
+static bool ConsentratorRadioTask_sendPacket(EasyLink_TxPacket* _packetAddress, uint32_t _timeout)
+{
+    bool    ret = false;
+
+    if (Semaphore_pend(sendSemHandle, _timeout))
+    {
+
+        if (EasyLink_transmit(&txPacket) == EasyLink_Status_Success)
+        {
+            ret = true;
+        }
+        Semaphore_post(sendSemHandle);
+    }
+
+    return  ret;
+}
+
+static void ConcentratorRadioTask_notifyPacketReceived(union ConcentratorPacket* latestRxPacket)
 {
     if (packetReceivedCallback)
     {
@@ -254,7 +318,7 @@ static void notifyPacketReceived(union ConcentratorPacket* latestRxPacket)
     }
 }
 
-static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status)
+static void ConcentratorRadioTask_rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status)
 {
     union ConcentratorPacket* tmpRxPacket;
 

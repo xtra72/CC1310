@@ -48,6 +48,7 @@
  *  ======== rfWsnconcentrator.c ========
  */
 /* XDCtools Header files */
+#include <ShellTask.h>
 #include <xdc/std.h>
 #include <xdc/runtime/System.h>
 
@@ -68,7 +69,7 @@
 /* Application Header files */ 
 #include "ConcentratorRadioTask.h"
 #include "ConcentratorTask.h"
-
+#include "ShellTask.h"
 /*
  *  ======== main ========
  */
@@ -78,13 +79,14 @@ int main(void)
     Board_initGeneral();
 
     /* Initialize the UART and SPI for the display driver. */
-    Display_init();
+    //Display_init();
     UART_init();
     SPI_init();
 
     /* Initialize concentrator tasks */
     ConcentratorRadioTask_init();
     ConcentratorTask_init();
+    ShellTask_init();
 
     /* Start BIOS */
     BIOS_start();
