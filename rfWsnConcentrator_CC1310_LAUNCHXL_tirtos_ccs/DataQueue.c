@@ -53,6 +53,36 @@ uint32_t    DataQ_count(DataQ* _dataQ)
     return  count;
 }
 
+bool    DataQ_lock(DataQ* _dataQ, uint32_t _timeout)
+{
+    return  Semaphore_pend(_dataQ->dataSemHandle, _timeout);
+}
+
+void    DataQ_unlock(DataQ* _dataQ)
+{
+    Semaphore_post(_dataQ->dataSemHandle);
+}
+
+DataQItem*  DataQ_front(DataQ* _dataQ)
+{
+    if (DataQ_count(_dataQ) == 0)
+    {
+        return  NULL;
+    }
+
+    return  &_dataQ->pool[_dataQ->headIndex];
+}
+
+DataQItem*  DataQ_rear(DataQ* _dataQ)
+{
+    if (DataQ_count(_dataQ) == 0)
+    {
+        return  NULL;
+    }
+
+    return  &_dataQ->pool[(_dataQ->tailIndex + _dataQ->poolSize - 1) % _dataQ->poolSize];
+}
+
 bool    DataQ_push(DataQ* _dataQ, uint8_t* data, uint32_t length)
 {
     if (_dataQ->poolSize - 1 <= DataQ_count(_dataQ))
@@ -84,28 +114,50 @@ bool    DataQ_pop(DataQ* _dataQ, uint8_t* buffer, uint32_t maxLength, uint32_t* 
 {
     bool    ret = true;
 
-    if (!Semaphore_pend(_dataQ->dataSemHandle, _timeout))
+    if (Semaphore_pend(_dataQ->dataSemHandle, _timeout))
     {
-        return  false;
+        if (maxLength < _dataQ->pool[_dataQ->headIndex].length)
+        {
+            ret = false;
+        }
+        else
+        {
+            if (buffer != NULL)
+            {
+                *length = _dataQ->pool[_dataQ->headIndex].length;
+                memcpy(buffer, _dataQ->pool[_dataQ->headIndex].data, _dataQ->pool[_dataQ->headIndex].length);
+            }
+            _dataQ->headIndex = (_dataQ->headIndex + 1) % _dataQ->poolSize;
+        }
+
+        Semaphore_post(_dataQ->accessSemHandle);
+    }
+
+    return  ret;
+}
+
+DataQItem*  DataQ_lazyPushBegin(DataQ* _dataQ)
+{
+    if (_dataQ->poolSize - 1 <= DataQ_count(_dataQ))
+    {
+        return  NULL;
     }
 
     /* Get access semaphore */
     Semaphore_pend(_dataQ->accessSemHandle, BIOS_WAIT_FOREVER);
 
-    if (maxLength < _dataQ->pool[_dataQ->headIndex].length)
+    return  &_dataQ->pool[_dataQ->tailIndex];
+}
+
+
+void    DataQ_lazyPushEnd(DataQ* _dataQ, bool _cancel)
+{
+    if (!_cancel)
     {
-        Semaphore_post(_dataQ->dataSemHandle);
-        ret = false;
-    }
-    else
-    {
-        *length = _dataQ->pool[_dataQ->headIndex].length;
-        memcpy(buffer, _dataQ->pool[_dataQ->headIndex].data, _dataQ->pool[_dataQ->headIndex].length);
-        _dataQ->headIndex = (_dataQ->headIndex + 1) % _dataQ->poolSize;
+        _dataQ->tailIndex = (_dataQ->tailIndex + 1) % _dataQ->poolSize;
     }
 
     Semaphore_post(_dataQ->accessSemHandle);
-
-    return  ret;
+    Semaphore_post(_dataQ->dataSemHandle);
 }
 

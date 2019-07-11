@@ -89,8 +89,20 @@
 #define CONCENTRATOR_ACTIVITY_LED Board_PIN_LED0 
 
 /***** Type declarations *****/
+typedef struct
+{
+    uint8_t destAddr;
+    uint8_t length;
+    uint8_t payload[EASYLINK_MAX_DATA_LENGTH];
+}   ConsentratorRadioTaskPostPacket;
 
 
+/***** Prototypes *****/
+static void concentratorRadioTask_main(UArg arg0, UArg arg1);
+static void ConcentratorRadioTask_rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status);
+static void ConcentratorRadioTask_notifyPacketReceived(union ConcentratorPacket* latestRxPacket);
+static bool ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t* _payload, uint32_t _len, uint32_t _timeout);
+static bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t _timeout);
 
 /***** Variable declarations *****/
 static Task_Params concentratorRadioTaskParams;
@@ -108,17 +120,10 @@ static struct AckPacket ackPacket;
 static uint8_t concentratorAddress;
 static int8_t latestRssi;
 
-
-/***** Prototypes *****/
-static void concentratorRadioTask_main(UArg arg0, UArg arg1);
-static void ConcentratorRadioTask_rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status);
-static void ConcentratorRadioTask_notifyPacketReceived(union ConcentratorPacket* latestRxPacket);
-static bool ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint8_t* _payload, uint32_t _len, uint32_t _timeout);
-static bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t _timeout);
-static bool ConsentratorRadioTask_sendPacket(EasyLink_TxPacket* _packetAddress, uint32_t _timeout);
-
 static  Semaphore_Struct    sendSem;  /* not static so you can see in ROV */
 static  Semaphore_Handle    sendSemHandle;
+
+static  DataQ   dataQ_;
 
 /* Pin driver handle */
 static PIN_Handle ledPinHandle;
@@ -139,6 +144,8 @@ void ConcentratorRadioTask_init(void) {
 	{
         System_abort("Error initializing board 3.3V domain pins\n");
     }
+
+	DataQ_init(&dataQ_, 4);
 
     /* Create event used internally for state changes */
     Event_Params eventParam;
@@ -223,87 +230,128 @@ static void concentratorRadioTask_main(UArg arg0, UArg arg1)
         if(events & RADIO_EVENT_INVALID_PACKET_RECEIVED) {
             /* Go back to RX */
             if(EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0) != EasyLink_Status_Success) {
-                System_abort("EasyLink_receiveAsync failed");
+                //System_abort("EasyLink_receiveAsync failed");
             }
         }
 
         if(events & RADIO_EVENT_SEND_PACKET_READY)
         {
-         //   ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint8_t* _payload, uint32_t _len, BIOS_WAIT_FOREVER)
+            while(DataQ_count(&dataQ_) != 0)
+            {
+                DataQ_lock(&dataQ_, BIOS_WAIT_FOREVER);
+
+                DataQItem*  item = DataQ_front(&dataQ_);
+
+                ConsentratorRadioTaskPostPacket* packet = (ConsentratorRadioTaskPostPacket*)item->data;
+                ConsentratorRadioTask_send(packet->destAddr, packet->payload, packet->length, BIOS_WAIT_FOREVER);
+                DataQ_unlock(&dataQ_);
+
+                DataQ_pop(&dataQ_, NULL, 0, 0, BIOS_WAIT_FOREVER);
+            }
         }
     }
 }
 
 
-static bool ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint8_t* _payload, uint32_t _len, uint32_t _timeout)
+bool    ConcentratorRadioTask_post(uint8_t _address, uint8_t* _payload, uint32_t _len)
 {
-    uint32_t absTime;
-
-    /* Set destinationAdress, but use EasyLink layers destination adress capability */
-    txPacket.dstAddr[0] = _destAddr;
-
-    /* Copy ACK packet to payload, skipping the destination adress byte.
-     * Note that the EasyLink API will implcitily both add the length byte and the destination address byte. */
-    union ConcentratorPacket   *packet = (union ConcentratorPacket *)txPacket.payload;
-    packet->header.sourceAddress = _srcAddr;
-    packet->header.packetType = RADIO_PACKET_TYPE_RAW_DATA_PACKET;
-    packet->header.options = RADIO_PACKET_OPTIONS_CRC;
-    packet->header.length = _len;
-
-    memcpy(packet->rawDataPacket.data, _payload, _len);
-    txPacket.len = sizeof(struct PacketHeader) + sizeof(uint16_t) + _len;
-
-    if(EasyLink_getAbsTime(&absTime) != EasyLink_Status_Success)
+    DataQItem*  item = DataQ_lazyPushBegin(&dataQ_);
+    if (!item)
     {
-        // Problem getting absolute time
-        // Still send ACK
-        txPacket.absTime = 0;
-    }
-    else
-    {
-        txPacket.absTime = absTime + EasyLink_us_To_RadioTime(CONCENTRATORRADIO_ACK_DELAY);
+        return  false;
     }
 
-    return  ConsentratorRadioTask_sendPacket(&txPacket, _timeout);
+    ((ConsentratorRadioTaskPostPacket*)item->data)->destAddr = _address;
+    ((ConsentratorRadioTaskPostPacket*)item->data)->length = _len;
+    memcpy(((ConsentratorRadioTaskPostPacket*)item->data)->payload, _payload, _len);
+
+    DataQ_lazyPushEnd(&dataQ_, false);
+    Event_post(radioOperationEventHandle, RADIO_EVENT_SEND_PACKET_READY);
+
+
+    return  true;
+
 }
 
-static bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t _timeout)
-{
-	uint32_t absTime;
-
-    /* Set destinationAdress, but use EasyLink layers destination adress capability */
-    txPacket.dstAddr[0] = latestSourceAddress;
-
-    /* Copy ACK packet to payload, skipping the destination adress byte.
-     * Note that the EasyLink API will implcitily both add the length byte and the destination address byte. */
-    memcpy(txPacket.payload, &ackPacket.header, sizeof(ackPacket));
-    txPacket.len = sizeof(ackPacket);
-	
-	if(EasyLink_getAbsTime(&absTime) != EasyLink_Status_Success)
-	{ 
-		// Problem getting absolute time
-		// Still send ACK 
-		txPacket.absTime = 0; 
-	} 
-	else
-	{
-		txPacket.absTime = absTime + EasyLink_us_To_RadioTime(CONCENTRATORRADIO_ACK_DELAY);
-	}
-
-	return  ConsentratorRadioTask_sendPacket(&txPacket, _timeout);
-}
-
-static bool ConsentratorRadioTask_sendPacket(EasyLink_TxPacket* _packetAddress, uint32_t _timeout)
+bool ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t* _payload, uint32_t _len, uint32_t _timeout)
 {
     bool    ret = false;
+    uint32_t absTime;
 
     if (Semaphore_pend(sendSemHandle, _timeout))
     {
+            /* Set destinationAdress, but use EasyLink layers destination adress capability */
+        txPacket.dstAddr[0] = _destAddr;
+
+        /* Copy ACK packet to payload, skipping the destination adress byte.
+         * Note that the EasyLink API will implcitily both add the length byte and the destination address byte. */
+        union ConcentratorPacket   *packet = (union ConcentratorPacket *)txPacket.payload;
+        packet->header.sourceAddress = concentratorAddress;
+        packet->header.packetType = RADIO_PACKET_TYPE_RAW_DATA_PACKET;
+        packet->header.options = RADIO_PACKET_OPTIONS_CRC;
+        packet->header.length = _len;
+
+        memcpy(packet->rawDataPacket.data, _payload, _len);
+        txPacket.len = sizeof(struct PacketHeader) + sizeof(uint16_t) + _len;
+
+#if 0
+        if(EasyLink_getAbsTime(&absTime) != EasyLink_Status_Success)
+        {
+            // Problem getting absolute time
+            // Still send ACK
+            txPacket.absTime = 0;
+        }
+        else
+        {
+            txPacket.absTime = absTime + EasyLink_us_To_RadioTime(CONCENTRATORRADIO_ACK_DELAY);
+        }
+#else
+        txPacket.absTime = 0;
+#endif
 
         if (EasyLink_transmit(&txPacket) == EasyLink_Status_Success)
         {
             ret = true;
         }
+
+        Semaphore_post(sendSemHandle);
+    }
+
+    return  ret;
+}
+
+bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t _timeout)
+{
+    bool    ret = false;
+
+    if (Semaphore_pend(sendSemHandle, _timeout))
+    {
+        uint32_t absTime;
+
+        /* Set destinationAdress, but use EasyLink layers destination adress capability */
+        txPacket.dstAddr[0] = latestSourceAddress;
+
+        /* Copy ACK packet to payload, skipping the destination adress byte.
+         * Note that the EasyLink API will implcitily both add the length byte and the destination address byte. */
+        memcpy(txPacket.payload, &ackPacket.header, sizeof(ackPacket));
+        txPacket.len = sizeof(ackPacket);
+
+        if(EasyLink_getAbsTime(&absTime) != EasyLink_Status_Success)
+        {
+            // Problem getting absolute time
+            // Still send ACK
+            txPacket.absTime = 0;
+        }
+        else
+        {
+            txPacket.absTime = absTime + EasyLink_us_To_RadioTime(CONCENTRATORRADIO_ACK_DELAY);
+        }
+
+        if (EasyLink_transmit(&txPacket) == EasyLink_Status_Success)
+        {
+            ret = true;
+        }
+
         Semaphore_post(sendSemHandle);
     }
 
@@ -379,7 +427,6 @@ static void ConcentratorRadioTask_rxDoneCallback(EasyLink_RxPacket * rxPacket, E
         }
         else if (tmpRxPacket->header.packetType == RADIO_PACKET_TYPE_TEST_RESET)
         {
-            uint32_t i;
             uint32_t offset = 0;
 
             /* Save packet */
@@ -402,4 +449,15 @@ static void ConcentratorRadioTask_rxDoneCallback(EasyLink_RxPacket * rxPacket, E
         /* Signal invalid packet received */
         Event_post(radioOperationEventHandle, RADIO_EVENT_INVALID_PACKET_RECEIVED);
     }
+}
+
+
+uint8_t  ConcentratorRadioTask_getAddress(void)
+{
+    return  concentratorAddress;
+}
+
+int8_t  ConcentratorRadioTask_getRssi(void)
+{
+    return  latestRssi;
 }

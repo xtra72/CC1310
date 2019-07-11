@@ -70,6 +70,7 @@
 /* Application Header files */ 
 #include "ConcentratorRadioTask.h"
 #include "ConcentratorTask.h"
+#include "ShellTask.h"
 #include "RadioProtocol.h"
 
 #include "DataQueue.h"
@@ -159,6 +160,7 @@ static void ConcentratorTask_updateNode(struct AdcSensorNode* node);
 static uint8_t ConcentratorTask_isKnownNodeAddress(uint8_t address);
 static void ConcentratorTask_ledBlinkClockCb(UArg arg0);
 
+
 /***** Function definitions *****/
 void ConcentratorTask_init(void)
 {
@@ -198,7 +200,7 @@ static void ConcentratorTask_main(UArg arg0, UArg arg1)
 {
     Trace_printf("Starting Concentrator ...\n");
 
-    DataQ_init(&dataQ_, 8);
+    DataQ_init(&dataQ_, 4);
 
     /* Register a packet received callback with the radio task */
     ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorTask_packetReceivedCallback);
@@ -416,5 +418,70 @@ static void ConcentratorTask_ledBlinkClockCb(UArg arg0)
 
 bool ConcentratorTask_sendCommand(uint16_t _device_id, uint8_t cmd)
 {
+    return  ConcentratorRadioTask_post(2, (uint8_t*)&cmd, 1);
+}
+
+
+bool    ConcentratorTask_commandConfig(int argc, char *argv[])
+{
+    if (argc == 1)
+    {
+        ShellTask_output("+%s:OK", argv[0]);
+    }
+    else
+    {
+        ShellTask_output("+%s:ID=%d", argv[0], ConcentratorRadioTask_getAddress());
+      }
+
+    return true;
+}
+
+bool    ConcentratorTask_commandStatus(int argc, char *argv[])
+{
+    if (argc == 1)
+    {
+        ShellTask_output("+%s:OK", argv[0]);
+    }
+    else
+    {
+        ShellTask_output("+%s:RSSI=%d", argv[0], ConcentratorRadioTask_getRssi());
+    }
+
+    return true;
+}
+
+bool    ConcentratorTask_commandStart(int argc, char *argv[])
+{
+    if (argc != 2)
+    {
+        return  false;
+    }
+
+    uint16_t device_id = (uint16_t)strtoul(argv[1], NULL, 10);
+
+    if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_START))
+    {
+        return  false;
+    }
+
+    ShellTask_output("+%s:OK", argv[0]);
+    return  true;
+}
+
+bool    ConcentratorTask_commandStop(int argc, char *argv[])
+{
+    if (argc != 2)
+    {
+        return  false;
+    }
+
+    uint16_t device_id = (uint16_t)strtoul(argv[1], NULL, 10);
+
+    if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_STOP))
+    {
+        return  false;
+    }
+
+    ShellTask_output("+%s:OK", argv[0]);
     return  true;
 }

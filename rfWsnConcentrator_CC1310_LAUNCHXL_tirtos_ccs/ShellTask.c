@@ -23,7 +23,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
+#include <strings.h>
 
 /* Board Header files */
 #include "Board.h"
@@ -45,13 +45,23 @@
 #define SHELL_IO_TASK_PRIORITY   3
 
 
-#define SHELL_TASK_BUFFER_SIZE  512
+#define SHELL_TASK_BUFFER_SIZE  256
 #define SHELL_EVENT_ALL                      0xFFFFFFFF
 #define SHELL_EVENT_DATA_IN                  (uint32_t)(1 << 0)
 #define SHELL_EVENT_NEW_RAW_DATA             (uint32_t)(1 << 1)
 #define SHELL_EVENT_TEST_RESET               (uint32_t)(1 << 2)
 #define SHELL_EVENT_ERROR                    (uint32_t)(1 << 3)
 
+
+/***** Prototypes *****/
+static void ShellTask_main(UArg arg0, UArg arg1);
+static void ShellIOTask_main(UArg arg0, UArg arg1);
+
+void    ShellTask_readCallback(UART_Handle handle, void *buf, size_t count);
+void    ShellTask_writeCallback(UART_Handle handle, void *buf, size_t count);
+
+void    ShellTask_output(char *fmt, ...);
+bool    ShellTask_write(char *_string, uint32_t _length, uint32_t _timeout);
 
 /***** Variable declarations *****/
 static  Task_Struct ShellTask;    /* not static so you can see in ROV */
@@ -65,28 +75,22 @@ static  uint32_t    txLen_ = 0;
 static  bool        echo_ = true;
 
 static  DataQ       dataQ_;
-static  Semaphore_Struct    readSem;  /* not static so you can see in ROV */
-static  Semaphore_Handle    readSemHandle;
-static  Semaphore_Struct    writeSem;  /* not static so you can see in ROV */
-static  Semaphore_Handle    writeSemHandle;
+static  Semaphore_Struct    readSem_;  /* not static so you can see in ROV */
+static  Semaphore_Handle    readSemHandle_;
+static  Semaphore_Struct    writeSem_;  /* not static so you can see in ROV */
+static  Semaphore_Handle    writeSemHandle_;
 
-
-
-/***** Prototypes *****/
-static void ShellTask_main(UArg arg0, UArg arg1);
-static void ShellIOTask_main(UArg arg0, UArg arg1);
-
-void    ShellTask_readCallback(UART_Handle handle, void *buf, size_t count);
-void    ShellTask_writeCallback(UART_Handle handle, void *buf, size_t count);
-
-void    ShellTask_output(char *fmt, ...);
-bool    ShellTask_write(char *_string, uint32_t _length, uint32_t _timeout);
+static  uint32_t            commandCount_ = 0;
+static  ShellTaskCommand    *commandList_ = NULL;
 
 /***** Function definitions *****/
-void ShellTask_init(void)
+void ShellTask_init(ShellTaskCommand _commandList[], uint32_t _count)
 {
     static  uint8_t stack[SHELL_TASK_STACK_SIZE];
-    static  uint8_t IOStack[SHELL_IO_TASK_STACK_SIZE];
+//    static  uint8_t IOStack[SHELL_IO_TASK_STACK_SIZE];
+
+    commandList_ = _commandList;
+    commandCount_ = _count;
 
     Task_Params     params;
     /* Create the SHELL radio protocol task */
@@ -97,12 +101,13 @@ void ShellTask_init(void)
     Task_construct(&ShellTask, ShellTask_main, &params, NULL);
 
     /* Create the SHELL radio protocol task */
+#if 0
     Task_Params_init(&params);
     params.stackSize = SHELL_IO_TASK_STACK_SIZE;
     params.priority = SHELL_IO_TASK_PRIORITY;
     params.stack = &IOStack;
     Task_construct(&ShellIOTask, ShellIOTask_main, &params, NULL);
-
+#endif
     DataQ_init(&dataQ_, 4);
 
     /* Create a UART with data processing off. */
@@ -114,7 +119,7 @@ void ShellTask_init(void)
     uartParams.readMode = UART_MODE_CALLBACK;
     uartParams.readDataMode = UART_DATA_TEXT;
     uartParams.readReturnMode = UART_RETURN_FULL;
-    uartParams.readEcho = UART_ECHO_OFF;
+    uartParams.readEcho = UART_ECHO_ON;
     uartParams.readCallback = ShellTask_readCallback;
     uartParams.baudRate = 921600;
 
@@ -122,12 +127,12 @@ void ShellTask_init(void)
 
     Semaphore_Params semParam;
     Semaphore_Params_init(&semParam);
-    Semaphore_construct(&readSem, 1, &semParam);
-    readSemHandle = Semaphore_handle(&readSem);
+    Semaphore_construct(&readSem_, 1, &semParam);
+    readSemHandle_ = Semaphore_handle(&readSem_);
 
     Semaphore_Params_init(&semParam);
-    Semaphore_construct(&writeSem, 1, &semParam);
-    writeSemHandle = Semaphore_handle(&writeSem);
+    Semaphore_construct(&writeSem_, 1, &semParam);
+    writeSemHandle_ = Semaphore_handle(&writeSem_);
 
 }
 
@@ -139,42 +144,41 @@ static void ShellTask_main(UArg arg0, UArg arg1)
     while(1)
     {
         txLen_ = 0;
-        if (DataQ_pop(&dataQ_, txBuffer_, sizeof(txBuffer_), &txLen_, 1000))
+        if (Semaphore_pend(readSemHandle_, 1))
+        {
+            static  char    rxBuffer;
+            UART_read(uart, &rxBuffer, 1);
+        }
+
+        if (DataQ_pop(&dataQ_, txBuffer_, sizeof(txBuffer_), &txLen_, 100))
         {
             char* token = strtok((char *)txBuffer_, "+");
             if ((token != NULL) && (strcasecmp(token, "AT") == 0))
             {
+                int i;
                 char* cmd = strtok(NULL, ":");
                 if (cmd != NULL)
                 {
                     bool    ret = false;
+                    char*   argv[8];
+                    int     argc = 0;
 
-                    if (strcasecmp(cmd, "start") == 0)
+                    argv[argc++] = cmd;
+                    while((token = strtok(NULL, ",")) != NULL)
                     {
-                        token = strtok(NULL, "");
-                        if (token != NULL)
-                        {
-                            uint16_t device_id = (uint16_t)strtoul(token, NULL, 10);
-
-                            ret = ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_START);
-                        }
+                        argv[argc++] = token;
                     }
-                    else if (strcasecmp(cmd, "stop") == 0)
-                    {
-                        token = strtok(NULL, "");
-                        if (token != NULL)
-                        {
-                            uint16_t device_id = (uint16_t)strtoul(token, NULL, 10);
 
-                            ret = ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_STOP);
+                    for(i = 0 ; i < commandCount_ ; i++)
+                    {
+                        if (strcasecmp(cmd, commandList_[i].name) == 0)
+                        {
+                            ret = commandList_[i].command(argc, argv);
+                            break;
                         }
                     }
 
-                    if (ret)
-                    {
-                        ShellTask_output("+%s:OK\n",cmd);
-                    }
-                    else
+                    if (!ret)
                     {
                         ShellTask_output("+%s:ERR\n",cmd);
                     }
@@ -194,7 +198,7 @@ static void ShellIOTask_main(UArg arg0, UArg arg1)
     while(1)
     {
         /* Get access semaphore */
-         Semaphore_pend(readSemHandle, BIOS_WAIT_FOREVER);
+         Semaphore_pend(readSemHandle_, BIOS_WAIT_FOREVER);
 
          UART_read(uart, &rxBuffer, 1);
     }
@@ -229,18 +233,18 @@ void ShellTask_readCallback(UART_Handle handle, void *buf, size_t count)
 
         if (echo_)
         {
-            Semaphore_pend(writeSemHandle, BIOS_WAIT_FOREVER);
+            Semaphore_pend(writeSemHandle_, BIOS_WAIT_FOREVER);
             UART_write(uart, &ch[i], 1);
         }
     }
 
-    Semaphore_post(readSemHandle);
+    Semaphore_post(readSemHandle_);
 }
 
 
 void ShellTask_writeCallback(UART_Handle handle, void *buf, size_t count)
 {
-    Semaphore_post(writeSemHandle);
+    Semaphore_post(writeSemHandle_);
 }
 
 static  char    newFmt[512];
@@ -250,7 +254,7 @@ void  ShellTask_output(char *fmt, ...)
 {
     if (NULL != uart)
     {
-        Semaphore_pend(writeSemHandle, BIOS_WAIT_FOREVER);
+        Semaphore_pend(writeSemHandle_, BIOS_WAIT_FOREVER);
         va_list va;
         va_start(va, fmt);
 
@@ -263,7 +267,7 @@ void  ShellTask_output(char *fmt, ...)
 
 bool    ShellTask_write(char *_string, uint32_t _length, uint32_t _timeout)
 {
-    Semaphore_pend(writeSemHandle, _timeout);
+    Semaphore_pend(writeSemHandle_, _timeout);
     UART_write(uart, _string, _length);
 
     return  true;
@@ -286,7 +290,7 @@ void  Trace_printf(char *fmt, ...)
 {
     if (NULL != uart)
     {
-        Semaphore_pend(writeSemHandle, BIOS_WAIT_FOREVER);
+        Semaphore_pend(writeSemHandle_, BIOS_WAIT_FOREVER);
 
         uint32_t    currentTransferTime = (Clock_getTicks() * Clock_tickPeriod) / 1000;
 
@@ -302,4 +306,3 @@ void  Trace_printf(char *fmt, ...)
         va_end(va);
     }
 }
-

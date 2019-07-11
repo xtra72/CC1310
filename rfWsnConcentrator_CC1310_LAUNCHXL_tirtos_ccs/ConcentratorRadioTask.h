@@ -68,6 +68,11 @@ typedef void (*ConcentratorRadio_PacketReceivedCallback)(union ConcentratorPacke
 /* Create the ConcentratorRadioTask and creates all TI-RTOS objects */
 void ConcentratorRadioTask_init(void);
 
+uint8_t ConcentratorRadioTask_getAddress(void);
+int8_t  ConcentratorRadioTask_getRssi(void);
+
+bool    ConcentratorRadioTask_post(uint8_t _address, uint8_t* _payload, uint32_t _len);
+
 /* Register the packet received callback */
 void ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorRadio_PacketReceivedCallback callback);
 

@@ -55,4 +55,9 @@ void ConcentratorTask_init(void);
 
 bool ConcentratorTask_sendCommand(uint16_t _device_id, uint8_t cmd);
 
+bool ConcentratorTask_commandConfig(int argc, char *argv[]);
+bool ConcentratorTask_commandStatus(int argc, char *argv[]);
+bool ConcentratorTask_commandStart(int argc, char *argv[]);
+bool ConcentratorTask_commandStop(int argc, char *argv[]);
+
 #endif /* TASKS_CONCENTRATORTASK_H_ */

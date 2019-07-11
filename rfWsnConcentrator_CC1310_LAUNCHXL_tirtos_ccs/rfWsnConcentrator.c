@@ -73,6 +73,15 @@
 /*
  *  ======== main ========
  */
+
+const ShellTaskCommand    commandList_[] =
+{
+    {   .name = "cfg", .command = ConcentratorTask_commandConfig    },
+    {   .name = "stat", .command = ConcentratorTask_commandStatus   },
+    {   .name = "start", .command = ConcentratorTask_commandStart   },
+    {   .name = "stop", .command = ConcentratorTask_commandStart    }
+};
+
 int main(void)
 {
     /* Call driver init functions. */
@@ -81,12 +90,12 @@ int main(void)
     /* Initialize the UART and SPI for the display driver. */
     //Display_init();
     UART_init();
-    SPI_init();
+//    SPI_init();
 
     /* Initialize concentrator tasks */
     ConcentratorRadioTask_init();
     ConcentratorTask_init();
-    ShellTask_init();
+    ShellTask_init(commandList_, sizeof(commandList_) / sizeof(ShellTaskCommand));
 
     /* Start BIOS */
     BIOS_start();
