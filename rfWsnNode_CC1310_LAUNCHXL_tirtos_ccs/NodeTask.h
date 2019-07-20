@@ -66,6 +66,14 @@ void NodeTask_testTransferStop(void);
 void NodeTask_motionDetectionStart(void);
 void NodeTask_motionDetectionStop(void);
 
+void NodeTask_scanStart(void);
+void NodeTask_scanStop(void);
+
+void    NodeTask_transferStart(void);
+void    NodeTask_transferStop(void);
+void    NodeTask_motionStart(void);
+void    NodeTask_motionStop(void);
+
 void NodeTask_wakeup(void);
 
 void    NodeTask_getConfig(NODETASK_CONFIG* config);

@@ -47,6 +47,7 @@ typedef union
     uint8_t     raw[sizeof(SPI_Frame)];
 }   SPI_Buffer;
 
+static  uint8_t commandForMaster = 0;
 bool SPI_isValidFrame(SPI_Frame* frame);
 
 extern  Display_Handle hDisplaySerial;
@@ -264,19 +265,19 @@ void *slaveThread(void *arg0)
                         }
                     }
                     break;
-
-                case    RF_SPI_CMD_START_AUTO_TRANSFER:
+#if 0
+                case    RF_SPI_CMD_START_TEST_TRANSFER:
                     {
                         NodeTask_testTransferStart();
                     }
                     break;
 
-                case    RF_SPI_CMD_STOP_AUTO_TRANSFER:
+                case    RF_SPI_CMD_STOP_TEST_TRANSFER:
                     {
                         NodeTask_testTransferStop();
                     }
                     break;
-
+#endif
                 case    RF_SPI_CMD_START_MOTION_DETECTION:
                     {
                         NodeTask_motionDetectionStart();
@@ -308,6 +309,13 @@ void *slaveThread(void *arg0)
                         Trace_printf(hDisplaySerial, "Unknown ata received : cmd - %d, len = %d", rxBuffer.frame.cmd, rxBuffer.frame.len);
                     }
                 }
+
+                if ((txBuffer.frame.cmd == 0) && (commandForMaster != 0))
+                {
+                    txBuffer.frame.cmd = commandForMaster;
+                    commandForMaster  = 0;
+                }
+
             }
             else
             {
@@ -389,4 +397,11 @@ bool    SpiSlave_init(void)
     }
 
     return true;
+}
+
+bool    SpiSlave_setCommandForMaster(uint8_t cmd)
+{
+    commandForMaster = cmd;
+
+    return  true;
 }

@@ -17,6 +17,7 @@ ORDERED_OBJS += \
 "./DataQueue.obj" \
 "./NodeRadioTask.obj" \
 "./NodeTask.obj" \
+"./ShellTask.obj" \
 "./SpiSlave.obj" \
 "./ccfg.obj" \
 "./crc16.obj" \
@@ -184,8 +185,8 @@ rfWsnNode_CC1310_LAUNCHXL_tirtos_ccs.hex: $(EXE_OUTPUTS)
 # Other Targets
 clean:
 	-$(RM) $(BIN_OUTPUTS__QUOTED)$(EXE_OUTPUTS__QUOTED)
-	-$(RM) "CC1310_LAUNCHXL.obj" "CC1310_LAUNCHXL_fxns.obj" "DataQueue.obj" "NodeRadioTask.obj" "NodeTask.obj" "SpiSlave.obj" "ccfg.obj" "crc16.obj" "mpu6050.obj" "rfWsnNode.obj" "trace.obj" "easylink\EasyLink.obj" "easylink\easylink_config.obj" "smartrf_settings\smartrf_settings.obj" "smartrf_settings\smartrf_settings_predefined.obj" 
-	-$(RM) "CC1310_LAUNCHXL.d" "CC1310_LAUNCHXL_fxns.d" "DataQueue.d" "NodeRadioTask.d" "NodeTask.d" "SpiSlave.d" "ccfg.d" "crc16.d" "mpu6050.d" "rfWsnNode.d" "trace.d" "easylink\EasyLink.d" "easylink\easylink_config.d" "smartrf_settings\smartrf_settings.d" "smartrf_settings\smartrf_settings_predefined.d" 
+	-$(RM) "CC1310_LAUNCHXL.obj" "CC1310_LAUNCHXL_fxns.obj" "DataQueue.obj" "NodeRadioTask.obj" "NodeTask.obj" "ShellTask.obj" "SpiSlave.obj" "ccfg.obj" "crc16.obj" "mpu6050.obj" "rfWsnNode.obj" "trace.obj" "easylink\EasyLink.obj" "easylink\easylink_config.obj" "smartrf_settings\smartrf_settings.obj" "smartrf_settings\smartrf_settings_predefined.obj" 
+	-$(RM) "CC1310_LAUNCHXL.d" "CC1310_LAUNCHXL_fxns.d" "DataQueue.d" "NodeRadioTask.d" "NodeTask.d" "ShellTask.d" "SpiSlave.d" "ccfg.d" "crc16.d" "mpu6050.d" "rfWsnNode.d" "trace.d" "easylink\EasyLink.d" "easylink\easylink_config.d" "smartrf_settings\smartrf_settings.d" "smartrf_settings\smartrf_settings_predefined.d" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

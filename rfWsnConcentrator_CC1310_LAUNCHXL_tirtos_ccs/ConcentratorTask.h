@@ -47,12 +47,23 @@
 #ifndef TASKS_CONCENTRATORTASK_H_
 #define TASKS_CONCENTRATORTASK_H_
 
-#define CONCENTRATOR_COMMAND_DEVICE_STOP    0
-#define CONCENTRATOR_COMMAND_DEVICE_START   1
+#define CONCENTRATOR_COMMAND_DEVICE_START           0x81
+#define CONCENTRATOR_COMMAND_DEVICE_STOP            0x82
+#define CONCENTRATOR_COMMAND_DEVICE_START_TRANSFER  0x83
+#define CONCENTRATOR_COMMAND_DEVICE_STOP_TRANSFER   0x84
+#define CONCENTRATOR_COMMAND_DEVICE_START_DETECT    0x85
+#define CONCENTRATOR_COMMAND_DEVICE_STOP_DETECT     0x86
+#define CONCENTRATOR_COMMAND_DEVICE_SLEEP           0x87
 
 /* Create the ConcentratorRadioTask and creates all TI-RTOS objects */
 void ConcentratorTask_init(void);
 
-bool ConcentratorTask_sendCommand(uint16_t _device_id, uint8_t cmd);
+bool ConcentratorTask_sendCommand(uint8_t _device_id, uint8_t cmd, uint8_t *_params, uint32_t _length);
+
+bool ConcentratorTask_commandConfig(int argc, char *argv[]);
+bool ConcentratorTask_commandStatus(int argc, char *argv[]);
+bool ConcentratorTask_commandScan(int argc, char *argv[]);
+bool ConcentratorTask_commandSleep(int argc, char *argv[]);
+bool ConcentratorTask_commandDetect(int argc, char *argv[]);
 
 #endif /* TASKS_CONCENTRATORTASK_H_ */

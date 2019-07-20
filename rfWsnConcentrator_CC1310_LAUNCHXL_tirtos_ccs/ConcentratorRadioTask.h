@@ -71,4 +71,9 @@ void ConcentratorRadioTask_init(void);
 /* Register the packet received callback */
 void ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorRadio_PacketReceivedCallback callback);
 
+
+uint8_t ConcentratorRadioTask_getAddress(void);
+int8_t  ConcentratorRadioTask_getRssi(void);
+bool    ConcentratorRadioTask_postCommand(uint8_t _device_id, uint8_t _cmd, uint8_t* _params, uint32_t _length);
+
 #endif /* TASKS_CONCENTRATORRADIOTASKTASK_H_ */

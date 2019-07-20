@@ -11,4 +11,5 @@
 
 bool    SpiSlave_init(void);
 
+bool    SpiSlave_setCommandForMaster(uint8_t cmd);
 #endif /* SPISLAVE_H_ */

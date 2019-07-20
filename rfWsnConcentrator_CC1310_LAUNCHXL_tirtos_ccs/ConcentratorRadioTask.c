@@ -113,12 +113,17 @@ static int8_t latestRssi;
 static void concentratorRadioTask_main(UArg arg0, UArg arg1);
 static void ConcentratorRadioTask_rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status);
 static void ConcentratorRadioTask_notifyPacketReceived(union ConcentratorPacket* latestRxPacket);
-static bool ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint8_t* _payload, uint32_t _len, uint32_t _timeout);
+//static bool ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint8_t* _payload, uint32_t _len, uint32_t _timeout);
 static bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t _timeout);
 static bool ConsentratorRadioTask_sendPacket(EasyLink_TxPacket* _packetAddress, uint32_t _timeout);
 
 static  Semaphore_Struct    sendSem;  /* not static so you can see in ROV */
 static  Semaphore_Handle    sendSemHandle;
+
+static  uint8_t device_id = 0;
+static  uint8_t device_cmd = 0;
+static  uint8_t   device_params[32];
+static  uint32_t  device_length = 0;
 
 /* Pin driver handle */
 static PIN_Handle ledPinHandle;
@@ -234,7 +239,7 @@ static void concentratorRadioTask_main(UArg arg0, UArg arg1)
     }
 }
 
-
+#if 0
 static bool ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint8_t* _payload, uint32_t _len, uint32_t _timeout)
 {
     uint32_t absTime;
@@ -266,6 +271,7 @@ static bool ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint
 
     return  ConsentratorRadioTask_sendPacket(&txPacket, _timeout);
 }
+#endif
 
 static bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t _timeout)
 {
@@ -278,7 +284,22 @@ static bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t 
      * Note that the EasyLink API will implcitily both add the length byte and the destination address byte. */
     memcpy(txPacket.payload, &ackPacket.header, sizeof(ackPacket));
     txPacket.len = sizeof(ackPacket);
-	
+    if (device_id != 0)
+    {
+        txPacket.payload[txPacket.len++] = device_id;
+        txPacket.payload[txPacket.len++] = device_cmd;
+        if (device_length != 0)
+        {
+            txPacket.payload[txPacket.len++] = device_length;
+            memcpy(&txPacket.payload[txPacket.len], device_params, device_length);
+            txPacket.len += device_length;
+        }
+
+        device_id = 0;
+        device_cmd = 0;
+        device_length = 0;
+    }
+
 	if(EasyLink_getAbsTime(&absTime) != EasyLink_Status_Success)
 	{ 
 		// Problem getting absolute time
@@ -379,7 +400,6 @@ static void ConcentratorRadioTask_rxDoneCallback(EasyLink_RxPacket * rxPacket, E
         }
         else if (tmpRxPacket->header.packetType == RADIO_PACKET_TYPE_TEST_RESET)
         {
-            uint32_t i;
             uint32_t offset = 0;
 
             /* Save packet */
@@ -402,4 +422,24 @@ static void ConcentratorRadioTask_rxDoneCallback(EasyLink_RxPacket * rxPacket, E
         /* Signal invalid packet received */
         Event_post(radioOperationEventHandle, RADIO_EVENT_INVALID_PACKET_RECEIVED);
     }
+}
+
+bool    ConcentratorRadioTask_postCommand(uint8_t _device_id, uint8_t _cmd, uint8_t* _params, uint32_t _length)
+{
+    device_id = _device_id;
+    device_cmd = _cmd;
+    memcpy(device_params, _params, _length);
+    device_length = _length;
+
+    return  true;
+}
+
+uint8_t  ConcentratorRadioTask_getAddress(void)
+{
+    return  concentratorAddress;
+}
+
+int8_t  ConcentratorRadioTask_getRssi(void)
+{
+    return  latestRssi;
 }

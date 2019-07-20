@@ -64,12 +64,14 @@
 #include <ti/devices/DeviceFamily.h>
 #include DeviceFamily_constructPath(driverlib/cpu.h)
 
+#include <strings.h>
 /* Board Header files */
 #include "Board.h"
 
 /* Application Header files */ 
 #include "ConcentratorRadioTask.h"
 #include "ConcentratorTask.h"
+#include "ShellTask.h"
 #include "RadioProtocol.h"
 
 #include "DataQueue.h"
@@ -159,6 +161,7 @@ static void ConcentratorTask_updateNode(struct AdcSensorNode* node);
 static uint8_t ConcentratorTask_isKnownNodeAddress(uint8_t address);
 static void ConcentratorTask_ledBlinkClockCb(UArg arg0);
 
+
 /***** Function definitions *****/
 void ConcentratorTask_init(void)
 {
@@ -196,9 +199,9 @@ void ConcentratorTask_init(void)
 
 static void ConcentratorTask_main(UArg arg0, UArg arg1)
 {
-    Trace_printf("Starting Concentrator ...\n");
+    ShellTask_output("+BOOT\n");
 
-    DataQ_init(&dataQ_, 8);
+    DataQ_init(&dataQ_, 4);
 
     /* Register a packet received callback with the radio task */
     ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorTask_packetReceivedCallback);
@@ -260,7 +263,7 @@ static void ConcentratorTask_main(UArg arg0, UArg arg1)
 
             buffer[i*2]= 0;
 
-            Trace_printf("AT+RCVD: %4d.%03d, %d, %s", latestRawDataNode.time / 1000, latestRawDataNode.time % 1000, latestRawDataNode.length, buffer);
+            ShellTask_output("+DATA: %4d.%03d, %d, %s\n", latestRawDataNode.time / 1000, latestRawDataNode.time % 1000, latestRawDataNode.length, buffer);
 
         }
         else if(events & CONCENTRATOR_EVENT_TEST_RESET)
@@ -294,7 +297,7 @@ static void ConcentratorTask_main(UArg arg0, UArg arg1)
         if (currentReceivedTime != previousReceivedTime)
         {
             //clear screen, put cuser to beggining of terminal and print the header
-            Trace_printf("%8d %8d %8d %3d %8d %8d %8d %3d",
+            Trace_printf("%8d %8d %8d %3d %8d %8d %8d %3d\n",
                            receivedDataSize, successfullyReceivedPacket, receivedPacket, successfullyReceivedPacket * 100 / receivedPacket,
                            totalReceivedDataSize, totalSuccessfullyReceivedPacket, totalReceivedPacket, totalSuccessfullyReceivedPacket * 100 / totalReceivedPacket);
             receivedPacket =  0;
@@ -414,7 +417,192 @@ static void ConcentratorTask_ledBlinkClockCb(UArg arg0)
     }
 }
 
-bool ConcentratorTask_sendCommand(uint16_t _device_id, uint8_t cmd)
+bool ConcentratorTask_sendCommand(uint8_t _device_id, uint8_t cmd, uint8_t* _params, uint32_t _length)
 {
+    return  ConcentratorRadioTask_postCommand(_device_id, cmd, _params, _length);
+}
+
+
+bool    ConcentratorTask_commandConfig(int argc, char *argv[])
+{
+    if (argc == 1)
+    {
+        int8_t  power;
+
+        EasyLink_getRfPower(&power);
+        ShellTask_output("+%s:OK,FREQ=%d,POW=%d", argv[0],  EasyLink_getFrequency(), power);
+    }
+    else
+    {
+        int i;
+        for(i = 1 ; i < argc ; i++)
+        {
+            char* name = strtok(argv[i], "=");
+            if (strcasecmp(name, "FREQ") == 0)
+            {
+                char* value = strtok(NULL, " ");
+                if (value != 0)
+                {
+                    uint32_t    frequency = strtoul(value, NULL, 10);
+                    if ((RADIO_FREQUENCY_MIN <= frequency) && (frequency <= RADIO_FREQUENCY_MAX))
+                    {
+                        if (EasyLink_setFrequency(frequency) == EasyLink_Status_Success)
+                        {
+                            ShellTask_output("+%s:OK", argv[0]);
+                        }
+                        else
+                        {
+                            ShellTask_output("+%s:ERR", argv[0]);
+                        }
+                    }
+                    else
+                    {
+                        ShellTask_output("+%s:ERR", argv[0]);
+                    }
+                }
+            }
+            else if (strcasecmp(name, "POW") == 0)
+            {
+                char* value = strtok(NULL, " ");
+                if (value != 0)
+                {
+                    int32_t    power = strtol(value, NULL, 10);
+                    if ((RADIO_POWER_MIN <= power) && (power <= RADIO_POWER_MAX))
+                    {
+                        if (EasyLink_setRfPower(power) == EasyLink_Status_Success)
+                        {
+                            ShellTask_output("+%s:OK", argv[0]);
+                        }
+                        else
+                        {
+                            ShellTask_output("+%s:ERR", argv[0]);
+                        }
+                    }
+                    else
+                    {
+                        ShellTask_output("+%s:ERR", argv[0]);
+                    }
+                }
+            }
+        }
+
+    }
+
+    return true;
+}
+
+bool    ConcentratorTask_commandStatus(int argc, char *argv[])
+{
+    if (argc == 1)
+    {
+        ShellTask_output("+%s:OK", argv[0]);
+    }
+    else
+    {
+        ShellTask_output("+%s:RSSI=%d", argv[0], ConcentratorRadioTask_getRssi());
+    }
+
+    return true;
+}
+
+bool    ConcentratorTask_commandScan(int argc, char *argv[])
+{
+    if (argc != 3)
+    {
+        ShellTask_output("+%s:ERR", argv[0]);
+        return  false;
+    }
+
+    uint8_t device_id = (uint8_t)strtoul(argv[1], NULL, 10);
+    if (device_id == 0)
+    {
+        device_id = 2;
+    }
+
+    if (strcasecmp(argv[2], "ON") == 0)
+    {
+        if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_START, NULL, 0))
+        {
+            ShellTask_output("+%s:ERR", argv[0]);
+            return  false;
+        }
+    }
+    else
+    {
+        if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_STOP, NULL, 0))
+        {
+            ShellTask_output("+%s:ERR", argv[0]);
+            return  false;
+        }
+    }
+
+    ShellTask_output("+%s:OK", argv[0]);
+    return  true;
+}
+
+bool    ConcentratorTask_commandSleep(int argc, char *argv[])
+{
+    if (argc != 3)
+    {
+        ShellTask_output("+%s:ERR", argv[0]);
+        return  false;
+    }
+
+    uint16_t device_id = (uint16_t)strtoul(argv[1], NULL, 10);
+    uint32_t sleep_time = (uint32_t)strtoul(argv[2], NULL, 10);
+    uint8_t params[4];
+    if (device_id == 0)
+    {
+        device_id = 2;
+    }
+
+    params[0] = (sleep_time >> 24) & 0xFF;
+    params[1] = (sleep_time >> 16) & 0xFF;
+    params[2] = (sleep_time >>  8) & 0xFF;
+    params[3] = (sleep_time      ) & 0xFF;
+
+    if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_SLEEP, params, 4))
+    {
+        ShellTask_output("+%s:ERR", argv[0]);
+        return  false;
+    }
+
+    ShellTask_output("+%s:OK", argv[0]);
+    return  true;
+}
+
+
+bool    ConcentratorTask_commandDetect(int argc, char *argv[])
+{
+    if (argc != 3)
+    {
+        ShellTask_output("+%s:ERR", argv[0]);
+        return  false;
+    }
+
+    uint8_t device_id = (uint8_t)strtoul(argv[1], NULL, 10);
+    if (device_id == 0)
+    {
+        device_id = 2;
+    }
+
+    if (strcasecmp(argv[2], "ON") == 0)
+    {
+        if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_START_DETECT, NULL, 0))
+        {
+            ShellTask_output("+%s:ERR", argv[0]);
+            return  false;
+        }
+    }
+    else
+    {
+        if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_STOP_DETECT, NULL, 0))
+        {
+            ShellTask_output("+%s:ERR", argv[0]);
+            return  false;
+        }
+    }
+
+    ShellTask_output("+%s:OK", argv[0]);
     return  true;
 }

@@ -47,6 +47,8 @@
 #include <ti/drivers/power/PowerCC26XX.h>
 #include <ti/drivers/rf/RF.h>
 #include <ti/drivers/PIN.h>
+#include <ti/display/Display.h>
+#include <ti/display/DisplayExt.h>
 
 /* Board Header files */
 #include "Board.h"
@@ -55,6 +57,7 @@
 #include <stdlib.h>
 
 /* EasyLink API Header files */ 
+
 #include "easylink/EasyLink.h"
 
 /* Application Header files */ 
@@ -62,6 +65,7 @@
 #include "NodeRadioTask.h"
 #include "NodeTask.h"
 #include "crc16.h"
+#include "rf.h"
 
 #include <ti/devices/DeviceFamily.h>
 #include DeviceFamily_constructPath(driverlib/aon_batmon.h)
@@ -76,12 +80,19 @@
 #define RADIO_EVENT_DATA_ACK_RECEIVED   (uint32_t)(1 << 1)
 #define RADIO_EVENT_ACK_TIMEOUT         (uint32_t)(1 << 2)
 #define RADIO_EVENT_SEND_FAIL           (uint32_t)(1 << 3)
-#define RADIO_EVENT_SEND_RAW_DATA       (uint32_t)(1 << 5)
 #define RADIO_EVENT_TEST_RESET          (uint32_t)(1 << 4)
+#define RADIO_EVENT_SEND_RAW_DATA       (uint32_t)(1 << 5)
+#define RADIO_EVENT_COMMAND_START       (uint32_t)(1 << 6)
+#define RADIO_EVENT_COMMAND_STOP        (uint32_t)(1 << 7)
+#define RADIO_EVENT_COMMAND_START_SCAN      (uint32_t)(1 << 8)
+#define RADIO_EVENT_COMMAND_STOP_SCAN       (uint32_t)(1 << 9)
+#define RADIO_EVENT_COMMAND_START_TRANSFER  (uint32_t)(1 << 10)
+#define RADIO_EVENT_COMMAND_STOP_TRANSFER   (uint32_t)(1 << 11)
+#define RADIO_EVENT_COMMAND_START_MOTION    (uint32_t)(1 << 12)
+#define RADIO_EVENT_COMMAND_STOP_MOTION     (uint32_t)(1 << 13)
 
 #define NODERADIO_MAX_RETRIES 2
 #define NORERADIO_ACK_TIMEOUT_TIME_MS (160)
-
 
 /***** Type declarations *****/
 struct RadioOperation {
@@ -111,6 +122,10 @@ static uint8_t  nodeAddress = 0;
 
 /* Pin driver handle */
 extern PIN_Handle ledPinHandle;
+
+/* Display driver handles */
+extern  Display_Handle hDisplaySerial;
+
 
 /***** Prototypes *****/
 static void nodeRadioTaskFunction(UArg arg0, UArg arg1);
@@ -202,6 +217,31 @@ static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
         else if (events & RADIO_EVENT_TEST_RESET)
         {
             sendTestReset(NODERADIO_MAX_RETRIES, NORERADIO_ACK_TIMEOUT_TIME_MS);
+        }
+
+        if (events & RADIO_EVENT_COMMAND_START_SCAN)
+        {
+            NodeTask_scanStart();
+        }
+        else if (events & RADIO_EVENT_COMMAND_STOP_SCAN)
+        {
+            NodeTask_scanStop();
+        }
+        else if (events & RADIO_EVENT_COMMAND_START_TRANSFER)
+        {
+            NodeTask_transferStart();
+        }
+        else if (events & RADIO_EVENT_COMMAND_STOP_TRANSFER)
+        {
+            NodeTask_transferStop();
+        }
+        else if (events & RADIO_EVENT_COMMAND_START_MOTION)
+        {
+            NodeTask_motionStart();
+        }
+        else if (events & RADIO_EVENT_COMMAND_STOP_MOTION)
+        {
+            NodeTask_motionStop();
         }
 
         /* If we get an ACK from the concentrator */
@@ -411,6 +451,37 @@ static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status)
         {
             /* Signal ACK packet received */
             Event_post(radioOperationEventHandle, RADIO_EVENT_DATA_ACK_RECEIVED);
+            if (rxPacket->len != sizeof(struct AckPacket))
+            {
+                uint32_t    offset = sizeof(struct AckPacket);
+
+                Trace_printf(hDisplaySerial, "Ack with Command = %d\n",rxPacket->payload[offset + 1]);
+
+                if (rxPacket->payload[offset + 1] == RF_SPI_CMD_START_SCAN)
+                {
+                    Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_START_SCAN);
+                }
+                else if (rxPacket->payload[offset + 1] == RF_SPI_CMD_STOP_SCAN)
+                {
+                    Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_STOP_SCAN);
+                }
+                else if (rxPacket->payload[offset + 1] == RF_SPI_CMD_START_TRANSFER)
+                {
+                    Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_START_TRANSFER);
+                }
+                else if (rxPacket->payload[offset + 1] == RF_SPI_CMD_STOP_TRANSFER)
+                {
+                    Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_STOP_TRANSFER);
+                }
+                else if (rxPacket->payload[offset + 1] == RF_SPI_CMD_START_MOTION_DETECTION)
+                {
+                    Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_START_MOTION);
+                }
+                else if (rxPacket->payload[offset + 1] == RF_SPI_CMD_STOP_MOTION_DETECTION)
+                {
+                    Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_STOP_MOTION);
+                }
+            }
         }
         else
         {

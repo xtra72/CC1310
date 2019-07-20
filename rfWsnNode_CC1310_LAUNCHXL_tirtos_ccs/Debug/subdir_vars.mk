@@ -14,6 +14,7 @@ C_SRCS += \
 ../DataQueue.c \
 ../NodeRadioTask.c \
 ../NodeTask.c \
+../ShellTask.c \
 ../SpiSlave.c \
 ../ccfg.c \
 ../crc16.c \
@@ -27,6 +28,7 @@ C_DEPS += \
 ./DataQueue.d \
 ./NodeRadioTask.d \
 ./NodeTask.d \
+./ShellTask.d \
 ./SpiSlave.d \
 ./ccfg.d \
 ./crc16.d \
@@ -40,6 +42,7 @@ OBJS += \
 ./DataQueue.obj \
 ./NodeRadioTask.obj \
 ./NodeTask.obj \
+./ShellTask.obj \
 ./SpiSlave.obj \
 ./ccfg.obj \
 ./crc16.obj \
@@ -53,6 +56,7 @@ OBJS__QUOTED += \
 "DataQueue.obj" \
 "NodeRadioTask.obj" \
 "NodeTask.obj" \
+"ShellTask.obj" \
 "SpiSlave.obj" \
 "ccfg.obj" \
 "crc16.obj" \
@@ -66,6 +70,7 @@ C_DEPS__QUOTED += \
 "DataQueue.d" \
 "NodeRadioTask.d" \
 "NodeTask.d" \
+"ShellTask.d" \
 "SpiSlave.d" \
 "ccfg.d" \
 "crc16.d" \
@@ -79,6 +84,7 @@ C_SRCS__QUOTED += \
 "../DataQueue.c" \
 "../NodeRadioTask.c" \
 "../NodeTask.c" \
+"../ShellTask.c" \
 "../SpiSlave.c" \
 "../ccfg.c" \
 "../crc16.c" \

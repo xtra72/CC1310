@@ -56,7 +56,6 @@ PIN_Config interruptPinTable[] = {
 
 extern  Display_Handle hDisplaySerial;
 
-static  bool            stop_ = false;
 static  uint8_t         slaveId_ = 0x68;
 static  I2C_Handle      i2c_;
 static  uint8_t         txBuffer[MPU6050_BUFFER_LENGTH_MAX];
@@ -480,7 +479,6 @@ bool    MPU6050_init(void)
 {
 
     I2C_Params      i2cParams;
-    int32_t         status;
 
     I2C_init();
 

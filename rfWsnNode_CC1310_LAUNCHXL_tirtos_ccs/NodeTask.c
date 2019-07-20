@@ -62,6 +62,8 @@
 #include "DataQueue.h"
 #include "Trace.h"
 #include "mpu6050.h"
+#include "SpiSlave.h"
+#include "rf.h"
 
 /***** Defines *****/
 #define NODE_TASK_STACK_SIZE 1024
@@ -79,6 +81,12 @@
 #define NODE_EVENT_WAKEUP               (uint32_t)(1 << 9)
 #define NODE_EVENT_MOTION_DETECTION_START    (uint32_t)(1 << 10)
 #define NODE_EVENT_MOTION_DETECTION_STOP     (uint32_t)(1 << 11)
+#define NODE_EVENT_SCAN_START           (uint32_t)(1 << 12)
+#define NODE_EVENT_SCAN_STOP            (uint32_t)(1 << 13)
+#define NODE_EVENT_TRANSFER_START           (uint32_t)(1 << 13)
+#define NODE_EVENT_TRANSFER_STOP            (uint32_t)(1 << 14)
+#define NODE_EVENT_MOTION_START           (uint32_t)(1 << 15)
+#define NODE_EVENT_MOTION_STOP            (uint32_t)(1 << 16)
 
 #define TRANSFER_EVENT_ALL              0xFFFFFFFF
 #define TRANSFER_EVENT_SUCCESS          (uint32_t)(1 << 1)
@@ -317,6 +325,31 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         else if( events & NODE_EVENT_MOTION_DETECTION_STOP)
         {
             NodeTask_eventMotionDetectionStop();
+        }
+
+        if( events & NODE_EVENT_SCAN_START)
+        {
+            SpiSlave_setCommandForMaster(RF_SPI_CMD_START_SCAN);
+        }
+        else if( events & NODE_EVENT_SCAN_STOP)
+        {
+            SpiSlave_setCommandForMaster(RF_SPI_CMD_STOP_SCAN);
+        }
+        else if( events & NODE_EVENT_TRANSFER_START)
+        {
+            SpiSlave_setCommandForMaster(RF_SPI_CMD_START_TRANSFER);
+        }
+        else if( events & NODE_EVENT_TRANSFER_STOP)
+        {
+            SpiSlave_setCommandForMaster(RF_SPI_CMD_STOP_TRANSFER);
+        }
+        else if( events & NODE_EVENT_MOTION_START)
+        {
+            SpiSlave_setCommandForMaster(RF_SPI_CMD_START_MOTION_DETECTION);
+        }
+        else if( events & NODE_EVENT_MOTION_STOP)
+        {
+            SpiSlave_setCommandForMaster(RF_SPI_CMD_STOP_MOTION_DETECTION);
         }
     }
 }
@@ -557,6 +590,36 @@ void    NodeTask_eventMotionDetectionStart(void)
 
 void    NodeTask_eventMotionDetectionStop(void)
 {
+}
+
+void    NodeTask_scanStart(void)
+{
+    Event_post(nodeEventHandle, NODE_EVENT_SCAN_START);
+}
+
+void    NodeTask_scanStop(void)
+{
+    Event_post(nodeEventHandle, NODE_EVENT_SCAN_STOP);
+}
+
+void    NodeTask_transferStart(void)
+{
+    Event_post(nodeEventHandle, NODE_EVENT_TRANSFER_START);
+}
+
+void    NodeTask_transferStop(void)
+{
+    Event_post(nodeEventHandle, NODE_EVENT_TRANSFER_STOP);
+}
+
+void    NodeTask_motionStart(void)
+{
+    Event_post(nodeEventHandle, NODE_EVENT_MOTION_START);
+}
+
+void    NodeTask_motionStop(void)
+{
+    Event_post(nodeEventHandle, NODE_EVENT_MOTION_STOP);
 }
 
 void    NodeTask_eventDataTransfer(void)
