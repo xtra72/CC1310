@@ -236,6 +236,7 @@ NodeRadioTask.obj: ../NodeRadioTask.h
 NodeRadioTask.obj: ../NodeTask.h
 NodeRadioTask.obj: ../crc16.h
 NodeRadioTask.obj: ../rf.h
+NodeRadioTask.obj: ../trace.h
 NodeRadioTask.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/aon_batmon.h
 NodeRadioTask.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/../inc/hw_aon_batmon.h
 NodeRadioTask.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/trng.h
@@ -477,6 +478,7 @@ C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdlib.h:
 ../NodeTask.h: 
 ../crc16.h: 
 ../rf.h: 
+../trace.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/aon_batmon.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/../inc/hw_aon_batmon.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/trng.h: 

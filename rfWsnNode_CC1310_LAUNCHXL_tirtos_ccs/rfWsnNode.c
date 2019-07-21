@@ -36,7 +36,7 @@
 
 /* BIOS Header files */
 #include <ti/sysbios/BIOS.h>
-#include <ti/display/Display.h>
+#include <ti/drivers/UART.h>
 #include <ti/drivers/Power.h>
 #include <ti/drivers/power/PowerCC26XX.h>
 
@@ -46,21 +46,27 @@
 /* Application Header files */ 
 #include "NodeRadioTask.h"
 #include "NodeTask.h"
-#include "SpiSlave.h"
+#include "ShellTask.h"
 #include "mpu6050.h"
 /*
  *  ======== main ========
  */
+const ShellTaskCommand    commandList_[] =
+{
+ {   .name = "cfg", .command = NodeTask_commandConfig    },
+ {   .name = "send", .command = NodeTask_commandSend    }
+};
+
 int main(void)
 {
     /* Call driver init functions. */
     Board_initGeneral();
-    Display_init();
+    UART_init();
 
     /* Initialize sensor node tasks */
     NodeRadioTask_init();
     NodeTask_init();
-    SpiSlave_init();
+    ShellTask_init(commandList_, sizeof(commandList_) / sizeof(ShellTaskCommand));
 
     /* Start BIOS */
     BIOS_start();

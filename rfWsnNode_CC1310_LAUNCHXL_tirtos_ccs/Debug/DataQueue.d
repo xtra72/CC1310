@@ -1,6 +1,7 @@
 # FIXED
 
 DataQueue.obj: ../DataQueue.c
+DataQueue.obj: ../DataQueue.h
 DataQueue.obj: C:/ti/xdctools_3_51_02_21_core/packages/xdc/std.h
 DataQueue.obj: C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdarg.h
 DataQueue.obj: C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/sys/_types.h
@@ -189,9 +190,9 @@ DataQueue.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/kernel/tirtos/packages/ti/
 DataQueue.obj: C:/ti/xdctools_3_51_02_21_core/packages/xdc/runtime/IModule.h
 DataQueue.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/kernel/tirtos/packages/ti/sysbios/knl/Event__epilogue.h
 DataQueue.obj: C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdbool.h
-DataQueue.obj: ../DataQueue.h
 
 ../DataQueue.c: 
+../DataQueue.h: 
 C:/ti/xdctools_3_51_02_21_core/packages/xdc/std.h: 
 C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdarg.h: 
 C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/sys/_types.h: 
@@ -380,4 +381,3 @@ C:/ti/simplelink_cc13x0_sdk_3_10_00_11/kernel/tirtos/packages/ti/sysbios/knl/Tas
 C:/ti/xdctools_3_51_02_21_core/packages/xdc/runtime/IModule.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/kernel/tirtos/packages/ti/sysbios/knl/Event__epilogue.h: 
 C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdbool.h: 
-../DataQueue.h: 

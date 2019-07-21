@@ -5,143 +5,141 @@
  *      Author: xtra7
  */
 
-/* XDCtools Header files */
-#include <xdc/std.h>
-#include <xdc/runtime/System.h>
-
-/* BIOS Header files */
-#include <ti/sysbios/BIOS.h>
-#include <ti/sysbios/knl/Task.h>
-#include <ti/sysbios/knl/Semaphore.h>
-
-#include <stdbool.h>
 #include "DataQueue.h"
 
-#define DATA_QUEUE_MAX_SIZE 16
 
-static  Semaphore_Struct    accessSem;  /* not static so you can see in ROV */
-static Semaphore_Handle     accessSemHandle;
-
-static  struct  DataQueueElement    pool[DATA_QUEUE_MAX_SIZE];
-static  uint32_t            headIndex = 0;
-static  uint32_t            tailIndex = 0;
-static  uint32_t            poolSize = DATA_QUEUE_MAX_SIZE;
-
-void    DataQ_init(uint32_t size)
+void    DataQ_init(DataQ* _dataQ, uint32_t _size)
 {
     Semaphore_Params semParam;
     Semaphore_Params_init(&semParam);
-    Semaphore_construct(&accessSem, 1, &semParam);
-    accessSemHandle = Semaphore_handle(&accessSem);
+    Semaphore_construct(&_dataQ->accessSem, 1, &semParam);
+    _dataQ->accessSemHandle = Semaphore_handle(&_dataQ->accessSem);
 
-    if (size < DATA_QUEUE_MAX_SIZE)
+    Semaphore_construct(&_dataQ->dataSem, 0, &semParam);
+    _dataQ->dataSemHandle = Semaphore_handle(&_dataQ->dataSem);
+
+    _dataQ->headIndex = 0;
+    _dataQ->tailIndex = 0;
+
+    if ((_size != 0) && (_size < DATA_QUEUE_MAX_SIZE))
     {
-        poolSize = size;
+        _dataQ->poolSize = _size;
+    }
+    else
+    {
+        _dataQ->poolSize = DATA_QUEUE_MAX_SIZE;
     }
 }
 
-uint32_t    DataQ_count(void)
+uint32_t    DataQ_count(DataQ* _dataQ)
 {
     uint32_t    count = 0;
 
     /* Get access semaphore */
-    Semaphore_pend(accessSemHandle, BIOS_WAIT_FOREVER);
+    Semaphore_pend(_dataQ->accessSemHandle, BIOS_WAIT_FOREVER);
 
-    if (headIndex <= tailIndex)
+    if (_dataQ->headIndex <= _dataQ->tailIndex)
     {
-        count = tailIndex - headIndex;
+        count = _dataQ->tailIndex - _dataQ->headIndex;
     }
     else
     {
-        count = (poolSize + tailIndex - headIndex);
+        count = (_dataQ->poolSize + _dataQ->tailIndex - _dataQ->headIndex);
     }
 
     /* Return access semaphore */
-    Semaphore_post(accessSemHandle);
+    Semaphore_post(_dataQ->accessSemHandle);
 
     return  count;
 }
 
-bool    DataQ_push(uint8_t* data, uint32_t length)
+bool    DataQ_push(DataQ* _dataQ, uint8_t* data, uint32_t length)
 {
-    if (poolSize - 1 <= DataQ_count())
+    if (_dataQ->poolSize - 1 <= DataQ_count(_dataQ))
     {
         return  false;
     }
 
-    if (sizeof(pool[0].data) < length)
+    if (sizeof(_dataQ->pool[0].data) < length)
     {
         return  false;
     }
 
     /* Get access semaphore */
-    Semaphore_pend(accessSemHandle, BIOS_WAIT_FOREVER);
+    Semaphore_pend(_dataQ->accessSemHandle, BIOS_WAIT_FOREVER);
 
-    pool[tailIndex].length = length;
-    memcpy(pool[tailIndex].data, data, length);
-    tailIndex = (tailIndex + 1) % poolSize;
+    _dataQ->pool[_dataQ->tailIndex].length = length;
+    memcpy(_dataQ->pool[_dataQ->tailIndex].data, data, length);
+    _dataQ->tailIndex = (_dataQ->tailIndex + 1) % _dataQ->poolSize;
 
     /* Return access semaphore */
-    Semaphore_post(accessSemHandle);
+    Semaphore_post(_dataQ->accessSemHandle);
+
+    Semaphore_post(_dataQ->dataSemHandle);
 
     return  true;
 }
 
-bool    DataQ_pop(uint8_t* buffer, uint32_t maxLength, uint32_t* length)
+bool    DataQ_pop(DataQ* _dataQ, uint8_t* buffer, uint32_t maxLength, uint32_t* length, uint32_t _timeout)
 {
-    if (DataQ_count() == 0)
-    {
-        return  false;
-    }
+    bool    ret = true;
 
-    if ((maxLength != 0) && (maxLength < pool[headIndex].length))
+    if (!Semaphore_pend(_dataQ->dataSemHandle, _timeout))
     {
         return  false;
     }
 
     /* Get access semaphore */
-    Semaphore_pend(accessSemHandle, BIOS_WAIT_FOREVER);
+    Semaphore_pend(_dataQ->accessSemHandle, BIOS_WAIT_FOREVER);
 
-    if (length != NULL)
+    if (!buffer)
     {
-        *length = pool[headIndex].length;
+        _dataQ->headIndex = (_dataQ->headIndex + 1) % _dataQ->poolSize;
+    }
+    else
+    {
+        if (maxLength < _dataQ->pool[_dataQ->headIndex].length)
+        {
+            Semaphore_post(_dataQ->dataSemHandle);
+            ret = false;
+        }
+        else
+        {
+            *length = _dataQ->pool[_dataQ->headIndex].length;
+            memcpy(buffer, _dataQ->pool[_dataQ->headIndex].data, _dataQ->pool[_dataQ->headIndex].length);
+            _dataQ->headIndex = (_dataQ->headIndex + 1) % _dataQ->poolSize;
+        }
     }
 
-    if (maxLength != 0)
-    {
-        memcpy(buffer, pool[headIndex].data, pool[headIndex].length);
-    }
-    headIndex = (headIndex + 1) % poolSize;
+    Semaphore_post(_dataQ->accessSemHandle);
 
-    /* Return access semaphore */
-    Semaphore_post(accessSemHandle);
-
-    return  true;
+    return  ret;
 }
 
-bool    DataQ_front(uint8_t* buffer, uint32_t maxLength, uint32_t* length)
-{
-    if (DataQ_count() == 0)
-    {
-        return  false;
-    }
 
-    if (maxLength < pool[headIndex].length)
+bool    DataQ_front(DataQ* _dataQ, uint8_t* buffer, uint32_t maxLength, uint32_t* length, uint32_t _timeout)
+{
+    bool    ret = true;
+
+    if (!Semaphore_pend(_dataQ->dataSemHandle, _timeout))
     {
         return  false;
     }
 
     /* Get access semaphore */
-    Semaphore_pend(accessSemHandle, BIOS_WAIT_FOREVER);
+    Semaphore_pend(_dataQ->accessSemHandle, BIOS_WAIT_FOREVER);
 
-    *length = pool[headIndex].length;
-    if ((buffer != NULL) && (maxLength != 0))
+    if (maxLength < _dataQ->pool[_dataQ->headIndex].length)
     {
-        memcpy(buffer, pool[headIndex].data, pool[headIndex].length);
+        ret = false;
     }
+    else
+    {
+        *length = _dataQ->pool[_dataQ->headIndex].length;
+        memcpy(buffer, _dataQ->pool[_dataQ->headIndex].data, _dataQ->pool[_dataQ->headIndex].length);
+    }
+    Semaphore_post(_dataQ->dataSemHandle);
+    Semaphore_post(_dataQ->accessSemHandle);
 
-    /* Return access semaphore */
-    Semaphore_post(accessSemHandle);
-
-    return  true;
+    return  ret;
 }

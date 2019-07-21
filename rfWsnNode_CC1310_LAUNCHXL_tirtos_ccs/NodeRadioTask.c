@@ -66,6 +66,7 @@
 #include "NodeTask.h"
 #include "crc16.h"
 #include "rf.h"
+#include "trace.h"
 
 #include <ti/devices/DeviceFamily.h>
 #include DeviceFamily_constructPath(driverlib/aon_batmon.h)
@@ -122,9 +123,6 @@ static uint8_t  nodeAddress = 0;
 
 /* Pin driver handle */
 extern PIN_Handle ledPinHandle;
-
-/* Display driver handles */
-extern  Display_Handle hDisplaySerial;
 
 
 /***** Prototypes *****/
@@ -455,7 +453,7 @@ static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status)
             {
                 uint32_t    offset = sizeof(struct AckPacket);
 
-                Trace_printf(hDisplaySerial, "Ack with Command = %d\n",rxPacket->payload[offset + 1]);
+                Trace_printf("Ack with Command = %d\n",rxPacket->payload[offset + 1]);
 
                 if (rxPacket->payload[offset + 1] == RF_SPI_CMD_START_SCAN)
                 {
@@ -504,3 +502,4 @@ static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status)
         Event_post(radioOperationEventHandle, RADIO_EVENT_ACK_TIMEOUT);
     }
 }
+

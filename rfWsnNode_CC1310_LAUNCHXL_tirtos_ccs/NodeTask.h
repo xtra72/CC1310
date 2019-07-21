@@ -81,4 +81,7 @@ bool    NodeTask_setConfig(NODETASK_CONFIG* config);
 
 void    NodeTask_getRFStatus(NODETASK_STATUS* status);
 
+bool    NodeTask_commandConfig(int argc, char *argv[]);
+bool    NodeTask_commandSend(int argc, char *argv[]);
+
 #endif /* TASKS_NODETASK_H_ */

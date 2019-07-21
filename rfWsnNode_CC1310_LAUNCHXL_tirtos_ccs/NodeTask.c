@@ -64,7 +64,7 @@
 #include "mpu6050.h"
 #include "SpiSlave.h"
 #include "rf.h"
-
+#
 /***** Defines *****/
 #define NODE_TASK_STACK_SIZE 1024
 #define NODE_TASK_PRIORITY   3
@@ -118,10 +118,6 @@ static Clock_Handle messageTimeoutClockHandle;
 Clock_Struct postMotionDetectedTimeoutClock;     /* not static so you can see in ROV */
 static Clock_Handle postMotionDetectedTimeoutClockHandle;
 
-/* Display driver handles */
-Display_Handle hDisplaySerial;
-
-
 struct  TestConfig
 {
     uint8_t     dataLength;
@@ -148,6 +144,7 @@ static  struct TestConfig   testConfigs[5] =
  {  .dataLength = 4 + 16 * 5, .period = 4,  .loopCount = 100  }
 };
 
+static   DataQ       dataQ_;
 static  uint8_t     configIndex = 0;
 static  uint8_t     rawData[128];
 
@@ -207,7 +204,7 @@ static void NodeTask_dataTransferFailed(void);
 void NodeTask_init(void)
 {
 
-    DataQ_init(16);
+    DataQ_init(&dataQ_, 4);
 
     /* Create event used internally for state changes */
     Event_Params eventParam;
@@ -258,14 +255,6 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
      * excluded, and UART is preferred by default. To display on the Watch
      * DevPack, add the precompiler define BOARD_DISPLAY_EXCLUDE_UART.
      */
-    hDisplaySerial = Display_open(Display_Type_UART, &params);
-
-    /* Check if the selected Display type was found and successfully opened */
-    if (hDisplaySerial)
-    {
-        Trace_printf(hDisplaySerial, "Waiting for SCE ADC reading...");
-    }
-
 
     MPU6050_init();
 
@@ -305,7 +294,7 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
                 Clock_setPeriod(messageTimeoutClockHandle, msToClock(messageGenerationOverrunSleep));
                 Clock_start(messageTimeoutClockHandle);
             }
-            Trace_printf(hDisplaySerial, "Over Run detected");
+            Trace_printf("Over Run detected");
         }
         else if( events & NODE_EVENT_OVERRUN_RELEASED)
         {
@@ -315,7 +304,7 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
                 Clock_setPeriod(messageTimeoutClockHandle, msToClock(testConfigs[configIndex].period));
                 Clock_start(messageTimeoutClockHandle);
             }
-            Trace_printf(hDisplaySerial, "Over Run released");
+            Trace_printf("Over Run released");
         }
 
         if( events & NODE_EVENT_MOTION_DETECTION_START)
@@ -376,7 +365,7 @@ static void messageTimeoutCallback(UArg arg0)
         buffer[dataLength++] = (uint8_t)(sampleIndex + dataLength);
     }
 
-    if (DataQ_push(buffer, dataLength) == true)
+    if (DataQ_push(&dataQ_, buffer, dataLength) == true)
     {
         if (overrun)
         {
@@ -436,7 +425,7 @@ bool NodeTask_dataTransfer(uint8_t* buffer, uint32_t length)
 
 bool NodeTask_postTransfer(uint8_t* buffer, uint32_t length)
 {
-    if (DataQ_push(buffer, length) == true)
+    if (DataQ_push(&dataQ_, buffer, length) == true)
     {
         Event_post(nodeEventHandle, NODE_EVENT_POST_TRANSFER);
         return  true;
@@ -488,7 +477,7 @@ void    NodeTask_postNotification(uint8_t _type)
     buffer[dataLength++] = 1;   // Size
     buffer[dataLength++] = _type;
 
-    if (DataQ_push(buffer, dataLength) == true)
+    if (DataQ_push(&dataQ_, buffer, dataLength) == true)
     {
         Event_post(nodeEventHandle, NODE_EVENT_POST_TRANSFER);
         if (overrun)
@@ -513,11 +502,11 @@ void    NodeTask_eventTestTransferStart(void)
     {
         Clock_start(transferTimeoutClockHandle);
         Clock_start(messageTimeoutClockHandle);
-        Trace_printf(hDisplaySerial, "Transfer started");
+        Trace_printf("Transfer started");
     }
     else
     {
-        Trace_printf(hDisplaySerial, "Transfer already started");
+        Trace_printf("Transfer already started");
     }
 }
 
@@ -527,11 +516,11 @@ void    NodeTask_eventTestTransferStop(void)
     {
         Clock_stop(transferTimeoutClockHandle);
         Clock_stop(messageTimeoutClockHandle);
-        Trace_printf(hDisplaySerial, "Transfer stopped");
+        Trace_printf("Transfer stopped");
     }
     else
     {
-        Trace_printf(hDisplaySerial, "Transfer not started");
+        Trace_printf("Transfer not started");
     }
 }
 
@@ -548,7 +537,7 @@ void    NodeTask_eventTestReset(void)
     if (NodeRadioTask_testReset() == NodeRadioStatus_Success)
     {
         configIndex = (configIndex + 1) % (sizeof(testConfigs) / sizeof(struct TestConfig));
-        Trace_printf(hDisplaySerial, "Test Reset : %08d %08d", testConfigs[configIndex].dataLength, testConfigs[configIndex].loopCount);
+        Trace_printf("Test Reset : %08d %08d", testConfigs[configIndex].dataLength, testConfigs[configIndex].loopCount);
 
         transferCount =  0;
         transferDataSize = 0;
@@ -559,7 +548,7 @@ void    NodeTask_eventTestReset(void)
     }
     else
     {
-        Trace_printf(hDisplaySerial, "Test Reset failed");
+        Trace_printf("Test Reset failed");
     }
 
     previousTransferTime = currentTransferTime;
@@ -569,10 +558,10 @@ void    NodeTask_eventMotionDetectionStart(void)
 {
     if (++motionDetectionTryCount <= motionDetectionMaxCount)
     {
-        Trace_printf(hDisplaySerial, "motion detection[%d]", motionDetectionTryCount);
+        Trace_printf("motion detection[%d]", motionDetectionTryCount);
         if (MPU6050_startMotionDetection(0.4))
         {
-            Trace_printf(hDisplaySerial, "Motion detected");
+            Trace_printf("Motion detected");
 
             noitificationTryCount =  0;
 
@@ -637,12 +626,12 @@ void    NodeTask_eventDataTransfer(void)
 void    NodeTask_eventPostTransfer(void)
 {
     /* Toggle activity LED */
-    if (DataQ_count() != 0)
+    if (DataQ_count(&dataQ_) != 0)
     {
         uint32_t    currentTransferTime;
 
         uint32_t    length = 0;
-        if (DataQ_front(rawData, sizeof(rawData), &length))
+        if (DataQ_front(&dataQ_, rawData, sizeof(rawData), &length, 10))
         {
             transferCount++;
             totalTransferCount++;
@@ -653,7 +642,7 @@ void    NodeTask_eventPostTransfer(void)
 
             if (NodeRadioTask_sendRawData(rawData, length) == NodeRadioStatus_Success)
             {
-                DataQ_pop(NULL, 0, &length);
+                DataQ_pop(&dataQ_, NULL, 0, &length, 0);
                 transferRetryCount = 0;
                 transferSuccessCount++;
                 totalTransferSuccessCount++;
@@ -662,18 +651,18 @@ void    NodeTask_eventPostTransfer(void)
             {
                 uint32_t    index = 0;
                 index = ((uint32_t)rawData[0] << 24) | ((uint32_t)rawData[1] << 16) | ((uint32_t)rawData[2] << 8) | (uint32_t)rawData[3];
-                Display_printf(hDisplaySerial, 0, 0, "Transfer error : %8x, %d", index, transferRetryCount++);
+               Trace_printf("Transfer error : %8x, %d\n", index, transferRetryCount++);
                 if (transferMaxRetryCount <= transferRetryCount)
                 {
-                    DataQ_pop(NULL, 0, &length);
-                    Display_printf(hDisplaySerial, 0, 0, "Packet drop : %8x", index);
+                    DataQ_pop(&dataQ_, NULL, 0, &length, 0);
+                   Trace_printf("Packet drop : %8x\n", index);
                 }
             }
         }
 
         if (currentTransferTime / 1000 != previousTransferTime / 1000)
         {
-            Trace_printf(hDisplaySerial, "%8d %8d %8d %8d %8d %8d",
+            Trace_printf("%8d %8d %8d %8d %8d %8d\n",
                            transferCount, transferDataSize, transferSuccessCount,
                            totalTransferCount, totalTransferDataSize, totalTransferSuccessCount);
             transferCount =  0;
@@ -684,7 +673,7 @@ void    NodeTask_eventPostTransfer(void)
         previousTransferTime = currentTransferTime;
     }
 
-    if (DataQ_count() != 0)
+    if (DataQ_count(&dataQ_) != 0)
     {
         Event_post(nodeEventHandle, NODE_EVENT_POST_TRANSFER);
     }
@@ -710,4 +699,60 @@ bool    NodeTask_setConfig(NODETASK_CONFIG* config)
     EasyLink_setFrequency(config->frequency);
 
     return  true;
+}
+
+
+bool    NodeTask_commandConfig(int argc, char *argv[])
+{
+    return  true;
+}
+
+bool    NodeTask_commandSend(int argc, char *argv[])
+{
+    if (argc != 2)
+    {
+        return  false;
+    }
+
+    uint32_t    i;
+
+    directTransferDataLength = 0;
+
+    for(i = 0 ; i < strlen(argv[1]) / 2 ; i++)
+    {
+        uint8_t value;
+
+        if (('0' <= argv[1][2*i]) && (argv[1][2*i] <= '9'))
+        {
+            value = argv[1][2*i] - '0';
+        }
+        else if (('A' <= argv[1][2*i]) && (argv[1][2*i] <= 'F'))
+        {
+            value = argv[1][2*i] - 'A' + 10;
+        }
+        else if (('a' <= argv[1][2*i]) && (argv[1][2*i] <= 'f'))
+        {
+            value = argv[1][2*i] - 'a' + 10;
+        }
+
+        if (('0' <= argv[1][2*i + 1]) && (argv[1][2*i + 1] <= '9'))
+        {
+            value = (value << 4) + argv[1][2*i + 1] - '0';
+        }
+        else if (('A' <= argv[1][2*i + 1]) && (argv[1][2*i + 1] <= 'F'))
+        {
+            value = (value << 4) + argv[1][2*i + 1] - 'A' + 10;
+        }
+        else if (('a' <= argv[1][2*i + 1]) && (argv[1][2*i + 1] <= 'f'))
+        {
+            value = (value << 4) + argv[1][2*i + 1] - 'a' + 10;
+        }
+
+        directTransferData[i] = value;
+        directTransferDataLength ++;
+    }
+
+    directTransferData[directTransferDataLength] = 0;
+
+    return  NodeTask_postTransfer(directTransferData, directTransferDataLength);
 }

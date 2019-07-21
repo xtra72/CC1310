@@ -101,7 +101,7 @@ rfWsnNode.obj: C:/ti/xdctools_3_51_02_21_core/packages/xdc/runtime/IInstance.h
 rfWsnNode.obj: C:/ti/xdctools_3_51_02_21_core/packages/xdc/runtime/IGateProvider.h
 rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/kernel/tirtos/packages/ti/sysbios/BIOS__epilogue.h
 rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/kernel/tirtos/packages/ti/sysbios/package/BIOS_RtsGateProxy.h
-rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/display/Display.h
+rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/UART.h
 rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/Power.h
 rfWsnNode.obj: C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdbool.h
 rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/utils/List.h
@@ -136,7 +136,7 @@ rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/d
 rfWsnNode.obj: C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/string.h
 rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_prop_cmd.h
 rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_ble_cmd.h
-rfWsnNode.obj: ../SpiSlave.h
+rfWsnNode.obj: ../ShellTask.h
 rfWsnNode.obj: ../mpu6050.h
 
 ../rfWsnNode.c: 
@@ -240,7 +240,7 @@ C:/ti/xdctools_3_51_02_21_core/packages/xdc/runtime/IInstance.h:
 C:/ti/xdctools_3_51_02_21_core/packages/xdc/runtime/IGateProvider.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/kernel/tirtos/packages/ti/sysbios/BIOS__epilogue.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/kernel/tirtos/packages/ti/sysbios/package/BIOS_RtsGateProxy.h: 
-C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/display/Display.h: 
+C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/UART.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/Power.h: 
 C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdbool.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/utils/List.h: 
@@ -275,5 +275,5 @@ C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_mai
 C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/string.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_prop_cmd.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_ble_cmd.h: 
-../SpiSlave.h: 
+../ShellTask.h: 
 ../mpu6050.h: 

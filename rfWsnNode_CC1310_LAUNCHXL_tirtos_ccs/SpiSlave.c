@@ -147,7 +147,7 @@ void *slaveThread(void *arg0)
     status = sem_init(&slaveSem, 0, 0);
     if (status != 0)
     {
-        Trace_printf(hDisplaySerial, "Error creating slaveSem\n");
+        Trace_printf("Error creating slaveSem\n");
 
         while(1);
     }
@@ -174,15 +174,15 @@ void *slaveThread(void *arg0)
     slaveSpi = SPI_open(Board_SPI_SLAVE, &spiParams);
     if (slaveSpi == NULL)
     {
-        Trace_printf(hDisplaySerial, "Error initializing slave SPI\n");
+        Trace_printf("Error initializing slave SPI\n");
         while (1);
     }
     else
     {
-        Trace_printf(hDisplaySerial, "Slave SPI initialized\n");
+        Trace_printf("Slave SPI initialized\n");
     }
 
-    Trace_printf(hDisplaySerial, "Sizeof (SPI_Frame) = %d\n", sizeof(SPI_Frame));
+    Trace_printf("Sizeof (SPI_Frame) = %d\n", sizeof(SPI_Frame));
     /* Copy message to transmit buffer */
 
     memset(txBuffer.raw, 0, sizeof(txBuffer));
@@ -203,7 +203,7 @@ void *slaveThread(void *arg0)
 //                CPUdelay(10);
 //            }
 
-            Trace_printf(hDisplaySerial, "Waiting transfer");
+            Trace_printf("Waiting transfer");
 //            PIN_setOutputValue(slaveStatusHandle, CC1310_LAUNCHXL_PIN_SPI_SLAVE_READY, 0);
             GPIO_write(Board_SPI_SLAVE_READY, 0);
 
@@ -225,7 +225,7 @@ void *slaveThread(void *arg0)
                 {
                 case    RF_SPI_CMD_GET_CONFIG:
                     {
-                        Trace_printf(hDisplaySerial, "Request get RF config!");
+                        Trace_printf("Request get RF config!");
 
                         NODETASK_CONFIG   config;
 
@@ -240,7 +240,7 @@ void *slaveThread(void *arg0)
 
                 case    RF_SPI_CMD_SET_CONFIG:
                     {
-                        Trace_printf(hDisplaySerial, "Request set RF config!");
+                        Trace_printf("Request set RF config!");
 
                         if (rxBuffer.frame.len == sizeof(NODETASK_CONFIG))
                         {
@@ -294,7 +294,7 @@ void *slaveThread(void *arg0)
                     {
                         if (!NodeTask_postTransfer(rxBuffer.frame.payload, rxBuffer.frame.len))
                         {
-                            Trace_printf(hDisplaySerial, "Data Tranfer Failed!");
+                            Trace_printf("Data Tranfer Failed!");
                         }
                     }
                     break;
@@ -306,7 +306,7 @@ void *slaveThread(void *arg0)
 
                 default:
                     {
-                        Trace_printf(hDisplaySerial, "Unknown ata received : cmd - %d, len = %d", rxBuffer.frame.cmd, rxBuffer.frame.len);
+                        Trace_printf("Unknown ata received : cmd - %d, len = %d", rxBuffer.frame.cmd, rxBuffer.frame.len);
                     }
                 }
 
@@ -319,12 +319,12 @@ void *slaveThread(void *arg0)
             }
             else
             {
-                Trace_printf(hDisplaySerial, "Invalid frame");
+                Trace_printf("Invalid frame");
             }
         }
         else
         {
-            Trace_printf(hDisplaySerial, "Unsuccessful slave SPI transfer");
+            Trace_printf("Unsuccessful slave SPI transfer");
         }
 
     }
@@ -335,7 +335,7 @@ void *slaveThread(void *arg0)
     GPIO_setConfig(Board_SPI_MASTER_READY, GPIO_CFG_OUTPUT | GPIO_CFG_OUT_LOW);
     GPIO_write(Board_SPI_SLAVE_READY, 0);
 
-    Trace_printf(hDisplaySerial, "\nDone");
+    Trace_printf("\nDone");
 
     return (NULL);
 }
@@ -350,7 +350,7 @@ bool SPI_isValidFrame(SPI_Frame* frame)
     uint16_t crc = CRC16_calc(frame->payload, frame->len);
     if (crc != frame->crc)
     {
-        Trace_printf(hDisplaySerial, "CRC invalid![%02x, %d, %04x]\n", frame->cmd, frame->len, frame->crc);
+        Trace_printf("CRC invalid![%02x, %d, %04x]\n", frame->cmd, frame->len, frame->crc);
         return  false;
     }
 
