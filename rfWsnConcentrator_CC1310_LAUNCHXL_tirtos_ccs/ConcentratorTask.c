@@ -76,6 +76,7 @@
 
 #include "DataQueue.h"
 #include "Trace.h"
+#include "rf.h"
 
 /***** Defines *****/
 #define CONCENTRATOR_TASK_STACK_SIZE 1024
@@ -90,12 +91,6 @@
 #define CONCENTRATOR_MAX_NODES 7
 
 #define CONCENTRATOR_DISPLAY_LINES 8
-
-#define CONCENTRATOR_LED_BLINK_ON_DURATION_MS       100
-#define CONCENTRATOR_LED_BLINK_OFF_DURATION_MS      400
-#define CONCENTRATOR_LED_BLINK_TIMES                5
-
-#define CONCENTRATOR_IDENTIFY_LED Board_PIN_LED1
 
 /***** Type declarations *****/
 struct AdcSensorNode {
@@ -138,20 +133,9 @@ static  uint32_t    totalReceivedDataSize = 0;
 static  uint32_t    totalSuccessfullyReceivedPacket = 0;
 
 /* Pin driver handle */
-static PIN_Handle identifyLedPinHandle;
-static PIN_State identifyLedPinState;
-
-/* Configure LED Pin */
-PIN_Config identifyLedPinTable[] = {
-        CONCENTRATOR_IDENTIFY_LED | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
-    PIN_TERMINATE
-};
 
 /* Clock for sensor stub */
-Clock_Struct ledBlinkClock;     /* Not static so you can see in ROV */
-static Clock_Handle ledBlinkClockHandle;
 
-static uint8_t ledBlinkCnt;
 
 /***** Prototypes *****/
 static void ConcentratorTask_main(UArg arg0, UArg arg1);
@@ -159,7 +143,6 @@ static void ConcentratorTask_packetReceivedCallback(union ConcentratorPacket* pa
 static void ConcentratorTask_addNewNode(struct AdcSensorNode* node);
 static void ConcentratorTask_updateNode(struct AdcSensorNode* node);
 static uint8_t ConcentratorTask_isKnownNodeAddress(uint8_t address);
-static void ConcentratorTask_ledBlinkClockCb(UArg arg0);
 
 
 /***** Function definitions *****/
@@ -178,23 +161,6 @@ void ConcentratorTask_init(void)
     concentratorTaskParams.priority = CONCENTRATOR_TASK_PRIORITY;
     concentratorTaskParams.stack = &concentratorTaskStack;
     Task_construct(&concentratorTask, ConcentratorTask_main, &concentratorTaskParams, NULL);
-
-    /* Open Identify LED pin */
-    identifyLedPinHandle = PIN_open(&identifyLedPinState, identifyLedPinTable);
-    if (!identifyLedPinHandle)
-    {
-        System_abort("Error initializing board 3.3V domain pins\n");
-    }
-
-    /* Create Identify Clock to Blink LED */
-    Clock_Params clkParams;
-    Clock_Params_init(&clkParams);
-
-    clkParams.startFlag = FALSE;
-    Clock_construct(&ledBlinkClock, ConcentratorTask_ledBlinkClockCb, 1, &clkParams);
-    ledBlinkClockHandle = Clock_handle(&ledBlinkClock);
-
-    ledBlinkCnt = 0;
 }
 
 static void ConcentratorTask_main(UArg arg0, UArg arg1)
@@ -377,46 +343,6 @@ static void ConcentratorTask_addNewNode(struct AdcSensorNode* node)
     }
 }
 
-static void ConcentratorTask_ledBlinkClockCb(UArg arg0)
-{
-    if(ledBlinkCnt < CONCENTRATOR_LED_BLINK_TIMES)
-    {
-        uint32_t ledState = PIN_getOutputValue(CONCENTRATOR_IDENTIFY_LED);
-
-        if(ledState)
-        {
-            ledBlinkCnt++;
-
-            /* turn off LED */
-            PIN_setOutputValue(identifyLedPinHandle, CONCENTRATOR_IDENTIFY_LED, 0);
-
-            /* Setup timeout to turn LED on */
-            Clock_setTimeout(ledBlinkClockHandle,
-                CONCENTRATOR_LED_BLINK_OFF_DURATION_MS * 1000 / Clock_tickPeriod);
-
-            /* Start sensor stub clock */
-            Clock_start(ledBlinkClockHandle);
-        }
-        else
-        {
-            /* turn on LED */
-            PIN_setOutputValue(identifyLedPinHandle, CONCENTRATOR_IDENTIFY_LED, 1);
-
-            /* Setup timeout to turn LED off */
-            Clock_setTimeout(ledBlinkClockHandle,
-                CONCENTRATOR_LED_BLINK_ON_DURATION_MS * 1000 / Clock_tickPeriod);
-
-            /* Start sensor stub clock */
-            Clock_start(ledBlinkClockHandle);
-        }
-    }
-    else
-    {
-        PIN_setOutputValue(identifyLedPinHandle, CONCENTRATOR_IDENTIFY_LED, 0);
-        ledBlinkCnt = 0;
-    }
-}
-
 bool ConcentratorTask_sendCommand(uint8_t _device_id, uint8_t cmd, uint8_t* _params, uint32_t _length)
 {
     return  ConcentratorRadioTask_postCommand(_device_id, cmd, _params, _length);
@@ -521,7 +447,7 @@ bool    ConcentratorTask_commandScan(int argc, char *argv[])
 
     if (strcasecmp(argv[2], "ON") == 0)
     {
-        if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_START, NULL, 0))
+        if (!ConcentratorTask_sendCommand(device_id, RF_REQ_SRV_SCAN_START, NULL, 0))
         {
             ShellTask_output("+%s:ERR", argv[0]);
             return  false;
@@ -529,7 +455,7 @@ bool    ConcentratorTask_commandScan(int argc, char *argv[])
     }
     else
     {
-        if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_STOP, NULL, 0))
+        if (!ConcentratorTask_sendCommand(device_id, RF_REQ_SRV_SCAN_STOP, NULL, 0))
         {
             ShellTask_output("+%s:ERR", argv[0]);
             return  false;
@@ -561,7 +487,7 @@ bool    ConcentratorTask_commandSleep(int argc, char *argv[])
     params[2] = (sleep_time >>  8) & 0xFF;
     params[3] = (sleep_time      ) & 0xFF;
 
-    if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_SLEEP, params, 4))
+    if (!ConcentratorTask_sendCommand(device_id, RF_REQ_SRV_SLEEP, params, 4))
     {
         ShellTask_output("+%s:ERR", argv[0]);
         return  false;
@@ -588,7 +514,7 @@ bool    ConcentratorTask_commandDetect(int argc, char *argv[])
 
     if (strcasecmp(argv[2], "ON") == 0)
     {
-        if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_START_DETECT, NULL, 0))
+        if (!ConcentratorTask_sendCommand(device_id, RF_REQ_SRV_MOTION_DETECTION_START, NULL, 0))
         {
             ShellTask_output("+%s:ERR", argv[0]);
             return  false;
@@ -596,7 +522,7 @@ bool    ConcentratorTask_commandDetect(int argc, char *argv[])
     }
     else
     {
-        if (!ConcentratorTask_sendCommand(device_id, CONCENTRATOR_COMMAND_DEVICE_STOP_DETECT, NULL, 0))
+        if (!ConcentratorTask_sendCommand(device_id, RF_REQ_SRV_MOTION_DETECTION_STOP, NULL, 0))
         {
             ShellTask_output("+%s:ERR", argv[0]);
             return  false;

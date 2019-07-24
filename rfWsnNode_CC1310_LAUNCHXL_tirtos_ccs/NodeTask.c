@@ -79,14 +79,19 @@
 #define NODE_EVENT_OVERRUN_RELEASED     (uint32_t)(1 << 7)
 #define NODE_EVENT_DATA_ON              (uint32_t)(1 << 8)
 #define NODE_EVENT_WAKEUP               (uint32_t)(1 << 9)
-#define NODE_EVENT_MOTION_DETECTION_START    (uint32_t)(1 << 10)
-#define NODE_EVENT_MOTION_DETECTION_STOP     (uint32_t)(1 << 11)
-#define NODE_EVENT_SCAN_START           (uint32_t)(1 << 12)
-#define NODE_EVENT_SCAN_STOP            (uint32_t)(1 << 13)
-#define NODE_EVENT_TRANSFER_START           (uint32_t)(1 << 13)
-#define NODE_EVENT_TRANSFER_STOP            (uint32_t)(1 << 14)
-#define NODE_EVENT_MOTION_START           (uint32_t)(1 << 15)
-#define NODE_EVENT_MOTION_STOP            (uint32_t)(1 << 16)
+#define NODE_EVENT_MOTION_DETECTION_START   (uint32_t)(1 << 10)
+#define NODE_EVENT_MOTION_DETECTION_RUN     (uint32_t)(1 << 11)
+#define NODE_EVENT_MOTION_DETECTION_STOP    (uint32_t)(1 << 12)
+#define NODE_EVENT_MOTION_DETECTED          (uint32_t)(1 << 13)
+
+#define NODE_EVENT_SRV_NOTI_TRANSFER_START            (uint32_t)(1 << 14)
+#define NODE_EVENT_SRV_NOTI_TRANSFER_STOP             (uint32_t)(1 << 15)
+#define NODE_EVENT_SRV_NOTI_SCAN_START                (uint32_t)(1 << 16)
+#define NODE_EVENT_SRV_NOTI_SCAN_STOP                 (uint32_t)(1 << 17)
+#define NODE_EVENT_SRV_NOTI_MOTION_DETECTION_START    (uint32_t)(1 << 18)
+#define NODE_EVENT_SRV_NOTI_MOTION_DETECTION_STOP     (uint32_t)(1 << 19)
+
+#define NODE_EVENT_MOTION_DETECTION_FINISHED            (uint32_t)(1 << 21)
 
 #define TRANSFER_EVENT_ALL              0xFFFFFFFF
 #define TRANSFER_EVENT_SUCCESS          (uint32_t)(1 << 1)
@@ -115,8 +120,8 @@ Clock_Struct messageTimeoutClock;     /* not static so you can see in ROV */
 static Clock_Handle messageTimeoutClockHandle;
 
 /* Clock for the motion detection timeout */
-Clock_Struct postMotionDetectedTimeoutClock;     /* not static so you can see in ROV */
-static Clock_Handle postMotionDetectedTimeoutClockHandle;
+Clock_Struct postMotionDetectedClock;     /* not static so you can see in ROV */
+static Clock_Handle postMotionDetectedClockHandle;
 
 /* Display driver handles */
 Display_Handle hDisplaySerial;
@@ -127,16 +132,6 @@ struct  TestConfig
     uint8_t     dataLength;
     uint32_t    period;
     uint8_t     loopCount;
-};
-
-static  NODETASK_CONFIG config_ =
-{
-     .shortAddress = 0x0002,
-     .power = 14,
-     .frequency = 92200000,
-     .maxPayloadLength= 60,
-     .timeout = 5000
-
 };
 
 static  struct TestConfig   testConfigs[5] =
@@ -169,11 +164,12 @@ static  uint32_t    messageGenerationOverrunSleep = 200;
 
 static  bool        overrun = false;
 
-static  uint32_t    motionDetectionTryCount = 0;
-static  uint32_t    motionDetectionMaxCount = 10;
+static  float       motionDetectionLimit_ = 0.4;
+static  uint32_t    motionDetectionCountTry_ = 0;
+static  uint32_t    motionDetectionCountMax_ = 0;
 
-static  uint32_t    noitificationTryCount = 0;
-static  uint32_t    noitificationMaxCount = 10;
+static  uint32_t    noitificationCountTry_ = 0;
+static  uint32_t    noitificationCountMax_ = 10;
 
 static  uint8_t     directTransferData[128];
 static  uint32_t    directTransferDataLength = 0;
@@ -184,14 +180,14 @@ static  uint32_t    directTransferDataLength = 0;
 static void nodeTaskFunction(UArg arg0, UArg arg1);
 static void transferTimeoutCallback(UArg arg0);
 static void messageTimeoutCallback(UArg arg0);
-static void postMotionDetectedTimeoutCallback(UArg arg0);
+static void postMotionDetectedCallback(UArg arg0);
 
 static void NodeTask_eventTestTransferStart(void);
 static void NodeTask_eventTestTransferStop(void);
 static void NodeTask_eventTestReset(void);
 
-static void NodeTask_eventMotionDetectionStart(void);
-static void NodeTask_eventMotionDetectionStop(void);
+static void NodeTask_motionDetectionRun(void);
+static void NodeTask_motionDetectionFinished(void);
 
 static void NodeTask_eventDataTransfer(void);
 static void NodeTask_eventPostTransfer(void);
@@ -231,8 +227,8 @@ void NodeTask_init(void)
     Clock_construct(&messageTimeoutClock, messageTimeoutCallback, 1, &clkParams);
     messageTimeoutClockHandle = Clock_handle(&messageTimeoutClock);
 
-    Clock_construct(&postMotionDetectedTimeoutClock, postMotionDetectedTimeoutCallback, 0, &clkParams);
-    postMotionDetectedTimeoutClockHandle = Clock_handle(&postMotionDetectedTimeoutClock);
+    Clock_construct(&postMotionDetectedClock, postMotionDetectedCallback, 0, &clkParams);
+    postMotionDetectedClockHandle = Clock_handle(&postMotionDetectedClock);
 
     /* Create the node task */
     Task_Params_init(&nodeTaskParams);
@@ -291,8 +287,7 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         {
             NodeTask_eventDataTransfer();
         }
-
-        if (events & NODE_EVENT_POST_TRANSFER)
+        else if (events & NODE_EVENT_POST_TRANSFER)
         {
             NodeTask_eventPostTransfer();
         }
@@ -320,36 +315,58 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
 
         if( events & NODE_EVENT_MOTION_DETECTION_START)
         {
-            NodeTask_eventMotionDetectionStart();
+            Trace_printf(hDisplaySerial, "Motion detection start.");
+            motionDetectionCountTry_ = 0;
+            NodeTask_motionDetectionRun();
+        }
+        if( events & NODE_EVENT_MOTION_DETECTION_RUN)
+        {
+            NodeTask_motionDetectionRun();
+        }
+        else if( events & NODE_EVENT_MOTION_DETECTION_FINISHED)
+        {
+            NodeTask_motionDetectionFinished();
         }
         else if( events & NODE_EVENT_MOTION_DETECTION_STOP)
         {
-            NodeTask_eventMotionDetectionStop();
+            MPU6050_stop();
+            Clock_stop(postMotionDetectedClockHandle);
+            Trace_printf(hDisplaySerial, "Motion detection stop.");
+        }
+        else if( events & NODE_EVENT_MOTION_DETECTED)
+        {
+            Trace_printf(hDisplaySerial, "Motion detected.");
+
+            noitificationCountTry_ =  0;
+
+            NodeTask_postMotionDetected();
+            Clock_setPeriod(postMotionDetectedClockHandle, msToClock(10000));
+            Clock_start(postMotionDetectedClockHandle);
         }
 
-        if( events & NODE_EVENT_SCAN_START)
+        if( events & NODE_EVENT_SRV_NOTI_SCAN_START)
         {
-            SpiSlave_setCommandForMaster(RF_SPI_CMD_START_SCAN);
+            SpiSlave_setNotification(RF_REQ_SRV_SCAN_START);
         }
-        else if( events & NODE_EVENT_SCAN_STOP)
+        else if( events & NODE_EVENT_SRV_NOTI_SCAN_STOP)
         {
-            SpiSlave_setCommandForMaster(RF_SPI_CMD_STOP_SCAN);
+            SpiSlave_setNotification( RF_REQ_SRV_SCAN_STOP);
         }
-        else if( events & NODE_EVENT_TRANSFER_START)
+        else if( events & NODE_EVENT_SRV_NOTI_TRANSFER_START)
         {
-            SpiSlave_setCommandForMaster(RF_SPI_CMD_START_TRANSFER);
+            SpiSlave_setNotification( RF_REQ_SRV_TRANSFER_START);
         }
-        else if( events & NODE_EVENT_TRANSFER_STOP)
+        else if( events & NODE_EVENT_SRV_NOTI_TRANSFER_STOP)
         {
-            SpiSlave_setCommandForMaster(RF_SPI_CMD_STOP_TRANSFER);
+            SpiSlave_setNotification( RF_REQ_SRV_TRANSFER_STOP);
         }
-        else if( events & NODE_EVENT_MOTION_START)
+        else if( events & NODE_EVENT_SRV_NOTI_MOTION_DETECTION_START)
         {
-            SpiSlave_setCommandForMaster(RF_SPI_CMD_START_MOTION_DETECTION);
+            SpiSlave_setNotification( RF_REQ_SRV_MOTION_DETECTION_START);
         }
-        else if( events & NODE_EVENT_MOTION_STOP)
+        else if( events & NODE_EVENT_SRV_NOTI_MOTION_DETECTION_STOP)
         {
-            SpiSlave_setCommandForMaster(RF_SPI_CMD_STOP_MOTION_DETECTION);
+            SpiSlave_setNotification( RF_REQ_SRV_MOTION_DETECTION_STOP);
         }
     }
 }
@@ -389,15 +406,15 @@ static void messageTimeoutCallback(UArg arg0)
     }
 }
 
-void postMotionDetectedTimeoutCallback(UArg arg0)
+void postMotionDetectedCallback(UArg arg0)
 {
-    if (++noitificationTryCount <= noitificationMaxCount)
+    if (++noitificationCountTry_ <= noitificationCountMax_)
     {
         NodeTask_postMotionDetected();
     }
     else
     {
-        Clock_stop(postMotionDetectedTimeoutClockHandle);
+        Clock_stop(postMotionDetectedClockHandle);
         Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_START);
     }
 }
@@ -460,16 +477,20 @@ void    NodeTask_wakeup(void)
     Event_post(nodeEventHandle, NODE_EVENT_WAKEUP);
 }
 
-void    NodeTask_motionDetectionStart(void)
+bool    NodeTask_motionDetectionStart(void)
 {
-    motionDetectionTryCount = 0;
+    motionDetectionCountTry_ = 0;
     Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_START);
+
+    return  true;
 }
 
-void    NodeTask_motionDetectionStop(void)
+bool    NodeTask_motionDetectionStop(void)
 {
-    motionDetectionTryCount = motionDetectionMaxCount;
+    motionDetectionCountTry_ = motionDetectionCountMax_;
     Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_STOP);
+
+    return  true;
 }
 
 void    NodeTask_postNotification(uint8_t _type)
@@ -504,7 +525,7 @@ void    NodeTask_postNotification(uint8_t _type)
 
 void    NodeTask_postMotionDetected(void)
 {
-    NodeTask_postNotification(NODE_NOTIFICATION_TYPE_MOTION_DETECTED);
+    SpiSlave_setNotification(RF_NOTI_MOTION_DETECTED);
 }
 
 void    NodeTask_eventTestTransferStart(void)
@@ -565,61 +586,66 @@ void    NodeTask_eventTestReset(void)
     previousTransferTime = currentTransferTime;
 }
 
-void    NodeTask_eventMotionDetectionStart(void)
+void    NodeTask_motionDetectionRun(void)
 {
-    if (++motionDetectionTryCount <= motionDetectionMaxCount)
+    ++motionDetectionCountTry_;
+    MPU6050_start();
+    Trace_printf(hDisplaySerial, "motion detection Run[%d]", motionDetectionCountTry_);
+}
+
+void    NodeTask_motionDetectionFinished(void)
+{
+    float   value;
+
+    MPU6050_stop();
+
+    value = MPU6050_getOscillationValue();
+    if (value >= motionDetectionLimit_)
     {
-        Trace_printf(hDisplaySerial, "motion detection[%d]", motionDetectionTryCount);
-        if (MPU6050_startMotionDetection(0.4))
+        Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTED);
+    }
+    else
+    {
+        if ((motionDetectionCountMax_ == 0) || (motionDetectionCountTry_ < motionDetectionCountMax_))
         {
-            Trace_printf(hDisplaySerial, "Motion detected");
-
-            noitificationTryCount =  0;
-
-            NodeTask_postMotionDetected();
-            Clock_setPeriod(postMotionDetectedTimeoutClockHandle, msToClock(10000));
-            Clock_start(postMotionDetectedTimeoutClockHandle);
-
-        }
-        else
-        {
-            Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_START);
+            Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_RUN);
         }
     }
 }
 
-void    NodeTask_eventMotionDetectionStop(void)
+void    NodeTask_notifyMotionDetectionFinished(void)
 {
+    Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_FINISHED);
 }
 
 void    NodeTask_scanStart(void)
 {
-    Event_post(nodeEventHandle, NODE_EVENT_SCAN_START);
+    Event_post(nodeEventHandle, NODE_EVENT_SRV_NOTI_SCAN_START);
 }
 
 void    NodeTask_scanStop(void)
 {
-    Event_post(nodeEventHandle, NODE_EVENT_SCAN_STOP);
+    Event_post(nodeEventHandle, NODE_EVENT_SRV_NOTI_SCAN_STOP);
 }
 
 void    NodeTask_transferStart(void)
 {
-    Event_post(nodeEventHandle, NODE_EVENT_TRANSFER_START);
+    Event_post(nodeEventHandle, NODE_EVENT_SRV_NOTI_TRANSFER_START);
 }
 
 void    NodeTask_transferStop(void)
 {
-    Event_post(nodeEventHandle, NODE_EVENT_TRANSFER_STOP);
+    Event_post(nodeEventHandle, NODE_EVENT_SRV_NOTI_TRANSFER_STOP);
 }
 
 void    NodeTask_motionStart(void)
 {
-    Event_post(nodeEventHandle, NODE_EVENT_MOTION_START);
+    Event_post(nodeEventHandle, NODE_EVENT_SRV_NOTI_MOTION_DETECTION_START);
 }
 
 void    NodeTask_motionStop(void)
 {
-    Event_post(nodeEventHandle, NODE_EVENT_MOTION_STOP);
+    Event_post(nodeEventHandle, NODE_EVENT_SRV_NOTI_MOTION_DETECTION_STOP);
 }
 
 void    NodeTask_eventDataTransfer(void)
@@ -710,4 +736,9 @@ bool    NodeTask_setConfig(NODETASK_CONFIG* config)
     EasyLink_setFrequency(config->frequency);
 
     return  true;
+}
+
+uint32_t NodeTask_getQueueSize(void)
+{
+    return  (DataQ_maxCount() -  DataQ_count());
 }

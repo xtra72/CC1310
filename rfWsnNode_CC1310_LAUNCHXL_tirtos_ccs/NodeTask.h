@@ -63,8 +63,8 @@ bool NodeTask_postTransfer(uint8_t* buffer, uint32_t length);
 void NodeTask_testTransferStart(void);
 void NodeTask_testTransferStop(void);
 
-void NodeTask_motionDetectionStart(void);
-void NodeTask_motionDetectionStop(void);
+bool NodeTask_motionDetectionStart(void);
+bool NodeTask_motionDetectionStop(void);
 
 void NodeTask_scanStart(void);
 void NodeTask_scanStop(void);
@@ -80,5 +80,7 @@ void    NodeTask_getConfig(NODETASK_CONFIG* config);
 bool    NodeTask_setConfig(NODETASK_CONFIG* config);
 
 void    NodeTask_getRFStatus(NODETASK_STATUS* status);
+
+uint32_t NodeTask_getQueueSize(void);
 
 #endif /* TASKS_NODETASK_H_ */

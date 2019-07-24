@@ -67,6 +67,8 @@ bool    MPU6050_write16(uint8_t address, uint16_t value);
 void    MPU6050_showRegister(uint8_t address, char *name);
 float    MPU6050_getOscillationValue(void);
 
+extern  void    NodeTask_notifyMotionDetectionFinished(void);
+
 /* Semaphore to block slave until transfer is complete */
 sem_t lock_;
 sem_t fifoFull_;
@@ -87,6 +89,8 @@ void MPU6050_interruptCallbackFxn(PIN_Handle handle, PIN_Id pinId)
         PIN_setInterrupt(interruptHandle, PIN_IRQ_DIS);
 
         sem_post(&fifoFull_);
+        NodeTask_notifyMotionDetectionFinished();
+
     }
 }
 
@@ -398,7 +402,7 @@ bool    MPU6050_popValue(uint8_t type, double* value)
  * ======== MPU6050_thread ========
  */
 
-bool    MPU6050_startMotionDetection(float _limit)
+bool    MPU6050_start(void)
 {
     Trace_printf(hDisplaySerial, "Start Motion Detection");
     MPU6050_write8(MPU6050_FIFO_CTRL, MPU6050_FIFO_CTRL_ACCL);
@@ -417,15 +421,22 @@ bool    MPU6050_startMotionDetection(float _limit)
 
 #else
     PIN_setInterrupt(interruptHandle, PIN_IRQ_POSEDGE);
-    sem_wait(&fifoFull_);
-    PIN_setInterrupt(interruptHandle, PIN_IRQ_DIS);
 #endif
+
+    return  true;
+}
+
+
+bool    MPU6050_stop(void)
+{
+    Trace_printf(hDisplaySerial, "Stop Motion Detection");
+    PIN_setInterrupt(interruptHandle, PIN_IRQ_DIS);
 
     MPU6050_write8(MPU6050_INT_ENABLE, 0);
     MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_ACCL_Z | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
     MPU6050_write8(MPU6050_PWR_MGMT_1,  MPU6050_PWR_MGMT_TEMP_DISABLE);
 
-    return  MPU6050_getOscillationValue() > _limit;
+    return true;
 }
 
 void    MPU6050_showRegister(uint8_t address, char *name)

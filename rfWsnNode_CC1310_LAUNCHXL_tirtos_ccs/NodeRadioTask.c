@@ -457,27 +457,27 @@ static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status)
 
                 Trace_printf(hDisplaySerial, "Ack with Command = %d\n",rxPacket->payload[offset + 1]);
 
-                if (rxPacket->payload[offset + 1] == RF_SPI_CMD_START_SCAN)
+                if (rxPacket->payload[offset + 1] == RF_REQ_SRV_SCAN_START)
                 {
                     Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_START_SCAN);
                 }
-                else if (rxPacket->payload[offset + 1] == RF_SPI_CMD_STOP_SCAN)
+                else if (rxPacket->payload[offset + 1] == RF_REQ_SRV_SCAN_STOP)
                 {
                     Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_STOP_SCAN);
                 }
-                else if (rxPacket->payload[offset + 1] == RF_SPI_CMD_START_TRANSFER)
+                else if (rxPacket->payload[offset + 1] == RF_REQ_SRV_TRANSFER_START)
                 {
                     Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_START_TRANSFER);
                 }
-                else if (rxPacket->payload[offset + 1] == RF_SPI_CMD_STOP_TRANSFER)
+                else if (rxPacket->payload[offset + 1] == RF_REQ_SRV_TRANSFER_STOP)
                 {
                     Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_STOP_TRANSFER);
                 }
-                else if (rxPacket->payload[offset + 1] == RF_SPI_CMD_START_MOTION_DETECTION)
+                else if (rxPacket->payload[offset + 1] == RF_REQ_SRV_MOTION_DETECTION_START)
                 {
                     Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_START_MOTION);
                 }
-                else if (rxPacket->payload[offset + 1] == RF_SPI_CMD_STOP_MOTION_DETECTION)
+                else if (rxPacket->payload[offset + 1] == RF_REQ_SRV_MOTION_DETECTION_STOP)
                 {
                     Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_STOP_MOTION);
                 }

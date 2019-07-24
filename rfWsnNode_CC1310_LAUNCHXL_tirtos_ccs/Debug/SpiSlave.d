@@ -62,7 +62,8 @@ SpiSlave.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/dr
 SpiSlave.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_mailbox.h
 SpiSlave.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_prop_cmd.h
 SpiSlave.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_ble_cmd.h
-SpiSlave.obj: ../rf.h
+SpiSlave.obj: ../SpiSlave.h
+SpiSlave.obj: ../DataQueue.h
 
 ../SpiSlave.c: 
 C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stddef.h: 
@@ -126,4 +127,5 @@ C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_com
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_mailbox.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_prop_cmd.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_ble_cmd.h: 
-../rf.h: 
+../SpiSlave.h: 
+../DataQueue.h: 

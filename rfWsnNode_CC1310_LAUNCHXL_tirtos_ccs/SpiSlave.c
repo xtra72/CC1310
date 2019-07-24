@@ -27,7 +27,8 @@
 #include "Trace.h"
 #include "crc16.h"
 #include "NodeTask.h"
-#include "rf.h"
+#include "SpiSlave.h"
+#include "DataQueue.h"
 #define THREADSTACKSIZE (1024)
 
 #define SPI_MSG_LENGTH  (80)
@@ -35,10 +36,14 @@
 
 typedef struct
 {
-    uint8_t cmd;
-    uint8_t len;
-    uint16_t crc;
-    uint8_t payload[SPI_MSG_LENGTH - 4];
+    uint8_t     cmd;
+    uint8_t     len;
+    uint16_t    crc;
+    uint8_t     result;
+    uint8_t     status;
+    uint8_t     qsize;
+    uint8_t     reserved;
+    uint8_t     payload[SPI_MSG_LENGTH - 8];
 }   SPI_Frame;
 
 typedef union
@@ -48,6 +53,7 @@ typedef union
 }   SPI_Buffer;
 
 static  uint8_t commandForMaster = 0;
+
 bool SPI_isValidFrame(SPI_Frame* frame);
 
 extern  Display_Handle hDisplaySerial;
@@ -223,7 +229,16 @@ void *slaveThread(void *arg0)
 
                 switch(rxBuffer.frame.cmd)
                 {
-                case    RF_SPI_CMD_GET_CONFIG:
+                case    RF_IO_TX_DATA:
+                    {
+                        if (!NodeTask_postTransfer(rxBuffer.frame.payload, rxBuffer.frame.len))
+                        {
+                            Trace_printf(hDisplaySerial, "Data Tranfer Failed!");
+                        }
+                    }
+                    break;
+
+                case    RF_IO_REQ_GET_CONFIG:
                     {
                         Trace_printf(hDisplaySerial, "Request get RF config!");
 
@@ -231,14 +246,13 @@ void *slaveThread(void *arg0)
 
                         NodeTask_getConfig(&config);
 
-                        txBuffer.frame.cmd = rxBuffer.frame.cmd;
+                        txBuffer.frame.cmd = RF_IO_REP_GET_CONFIG;
                         txBuffer.frame.len = sizeof(NODETASK_CONFIG);
                         memcpy(txBuffer.frame.payload, &config, sizeof(NODETASK_CONFIG));
-                        txBuffer.frame.crc =   CRC16_calc(txBuffer.frame.payload, txBuffer.frame.len);
                     }
                     break;
 
-                case    RF_SPI_CMD_SET_CONFIG:
+                case    RF_IO_REQ_SET_CONFIG:
                     {
                         Trace_printf(hDisplaySerial, "Request set RF config!");
 
@@ -250,57 +264,44 @@ void *slaveThread(void *arg0)
 
                                 NodeTask_getConfig(&config);
 
-                                txBuffer.frame.cmd = rxBuffer.frame.cmd;
+                                txBuffer.frame.cmd = RF_IO_REP_SET_CONFIG;
                                 txBuffer.frame.len = sizeof(NODETASK_CONFIG);
                                 memcpy(txBuffer.frame.payload, &config, sizeof(NODETASK_CONFIG));
-                                txBuffer.frame.crc =   CRC16_calc(txBuffer.frame.payload, txBuffer.frame.len);
                             }
                             else
                             {
-                                txBuffer.frame.cmd = rxBuffer.frame.cmd;
+                                txBuffer.frame.cmd = RF_IO_REP_SET_CONFIG;
                                 txBuffer.frame.len = 1;
                                 txBuffer.frame.payload[0] = 1;
-                                txBuffer.frame.crc =   CRC16_calc(txBuffer.frame.payload, txBuffer.frame.len);
                             }
                         }
                     }
                     break;
-#if 0
-                case    RF_SPI_CMD_START_TEST_TRANSFER:
-                    {
-                        NodeTask_testTransferStart();
-                    }
-                    break;
 
-                case    RF_SPI_CMD_STOP_TEST_TRANSFER:
+                case    RF_IO_REQ_MOTION_DETECT_START:
                     {
-                        NodeTask_testTransferStop();
-                    }
-                    break;
-#endif
-                case    RF_SPI_CMD_START_MOTION_DETECTION:
-                    {
-                        NodeTask_motionDetectionStart();
-                    }
-                    break;
-
-                case    RF_SPI_CMD_STOP_MOTION_DETECTION:
-                    {
-                        NodeTask_motionDetectionStop();
-                    }
-                    break;
-
-                case    RF_SPI_CMD_DATA_TRANSFER:
-                    {
-                        if (!NodeTask_postTransfer(rxBuffer.frame.payload, rxBuffer.frame.len))
+                        if (NodeTask_motionDetectionStart())
                         {
-                            Trace_printf(hDisplaySerial, "Data Tranfer Failed!");
+                            txBuffer.frame.cmd = RF_IO_REP_MOTION_DETECT_STARTED;
                         }
                     }
                     break;
 
-                case    RF_SPI_CMD_DUMMY:
+                case    RF_IO_REQ_MOTION_DETECT_STOP:
                     {
+                        if (NodeTask_motionDetectionStop())
+                        {
+                            txBuffer.frame.cmd = RF_IO_REP_MOTION_DETECT_STOPPED;
+                        }
+                    }
+                    break;
+
+                case    RF_IO_KEEP_ALIVE:
+                    {
+                        if (!NodeTask_postTransfer(NULL, 0))
+                        {
+                            Trace_printf(hDisplaySerial, "Data Tranfer Failed!");
+                        }
                     }
                     break;
 
@@ -310,12 +311,27 @@ void *slaveThread(void *arg0)
                     }
                 }
 
-                if ((txBuffer.frame.cmd == 0) && (commandForMaster != 0))
+                if (txBuffer.frame.cmd == 0)
                 {
-                    txBuffer.frame.cmd = commandForMaster;
-                    commandForMaster  = 0;
+                    if  (commandForMaster != 0)
+                    {
+                        txBuffer.frame.cmd = RF_IO_NOTI_FROM_SERVER;
+                        txBuffer.frame.len = sizeof(RF_SPI_REQ_FROM_SLAVE_PARAMS);
+                        ((RF_SPI_REQ_FROM_SLAVE_PARAMS *)txBuffer.frame.payload)->cmd = commandForMaster;
+                        commandForMaster = 0;
+                    }
                 }
+                else
+                {
+                    txBuffer.frame.cmd = RF_IO_STATUS;
+                    txBuffer.frame.len = 0;
+                }
+                txBuffer.frame.qsize = DataQ_maxCount() - DataQ_count();
 
+                if (txBuffer.frame.len != 0)
+                {
+                    txBuffer.frame.crc =   CRC16_calc(txBuffer.frame.payload, txBuffer.frame.len);
+                }
             }
             else
             {
@@ -399,7 +415,7 @@ bool    SpiSlave_init(void)
     return true;
 }
 
-bool    SpiSlave_setCommandForMaster(uint8_t cmd)
+bool    SpiSlave_setNotification(uint8_t cmd)
 {
     commandForMaster = cmd;
 

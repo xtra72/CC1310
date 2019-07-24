@@ -40,6 +40,11 @@ void    DataQ_init(uint32_t size)
     }
 }
 
+uint32_t    DataQ_maxCount(void)
+{
+    return  poolSize;
+}
+
 uint32_t    DataQ_count(void)
 {
     uint32_t    count = 0;
