@@ -37,6 +37,8 @@
 
 #define  NODE_NOTIFICATION_TYPE_MOTION_DETECTED   0x81
 
+#define NODE_STATUS_FLAG_MOTION_DETECTED    0x01
+
 typedef struct
 {
     uint16_t    shortAddress;
@@ -56,6 +58,7 @@ typedef struct
 /* Initializes the Node Task and creates all TI-RTOS objects */
 void NodeTask_init(void);
 
+uint8_t NodeTask_getStatus(void);
 void NodeTask_dataOn(void);
 bool NodeTask_dataTransfer(uint8_t* buffer, uint32_t length);
 bool NodeTask_postTransfer(uint8_t* buffer, uint32_t length);

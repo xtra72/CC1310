@@ -138,6 +138,7 @@ rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/d
 rfWsnNode.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_ble_cmd.h
 rfWsnNode.obj: ../SpiSlave.h
 rfWsnNode.obj: ../mpu6050.h
+rfWsnNode.obj: ../trace.h
 
 ../rfWsnNode.c: 
 C:/ti/xdctools_3_51_02_21_core/packages/xdc/std.h: 
@@ -277,3 +278,4 @@ C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_pro
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/rf_ble_cmd.h: 
 ../SpiSlave.h: 
 ../mpu6050.h: 
+../trace.h: 

@@ -30,8 +30,6 @@ SpiSlave.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/posix/ccs/unistd.
 SpiSlave.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/GPIO.h
 SpiSlave.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/SPI.h
 SpiSlave.obj: C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdbool.h
-SpiSlave.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/display/Display.h
-SpiSlave.obj: C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdarg.h
 SpiSlave.obj: ../Board.h
 SpiSlave.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/Board.h
 SpiSlave.obj: ../CC1310_LAUNCHXL.h
@@ -95,8 +93,6 @@ C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/posix/ccs/unistd.h:
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/GPIO.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/SPI.h: 
 C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdbool.h: 
-C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/display/Display.h: 
-C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdarg.h: 
 ../Board.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/Board.h: 
 ../CC1310_LAUNCHXL.h: 

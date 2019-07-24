@@ -123,9 +123,6 @@ static Clock_Handle messageTimeoutClockHandle;
 Clock_Struct postMotionDetectedClock;     /* not static so you can see in ROV */
 static Clock_Handle postMotionDetectedClockHandle;
 
-/* Display driver handles */
-Display_Handle hDisplaySerial;
-
 
 struct  TestConfig
 {
@@ -163,6 +160,8 @@ static  uint32_t    previousTransferTime = 0;
 static  uint32_t    messageGenerationOverrunSleep = 200;
 
 static  bool        overrun = false;
+
+static  uint8_t     status_ = 0;
 
 static  float       motionDetectionLimit_ = 0.4;
 static  uint32_t    motionDetectionCountTry_ = 0;
@@ -240,29 +239,6 @@ void NodeTask_init(void)
 
 static void nodeTaskFunction(UArg arg0, UArg arg1)
 {
-    /* Initialize display and try to open both UART and LCD types of display. */
-    Display_Params params;
-    Display_Params_init(&params);
-    params.lineClearMode = DISPLAY_CLEAR_BOTH;
-
-    /* Open an UART display.
-     * Whether the open call is successful depends on what is present in the
-     * Display_config[] array of the board file.
-     *
-     * Note that for SensorTag evaluation boards combined with the SHARP96x96
-     * Watch DevPack, there is a pin conflict with UART such that one must be
-     * excluded, and UART is preferred by default. To display on the Watch
-     * DevPack, add the precompiler define BOARD_DISPLAY_EXCLUDE_UART.
-     */
-    hDisplaySerial = Display_open(Display_Type_UART, &params);
-
-    /* Check if the selected Display type was found and successfully opened */
-    if (hDisplaySerial)
-    {
-        Trace_printf(hDisplaySerial, "Waiting for SCE ADC reading...");
-    }
-
-
     MPU6050_init();
 
     while (1)
@@ -300,7 +276,7 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
                 Clock_setPeriod(messageTimeoutClockHandle, msToClock(messageGenerationOverrunSleep));
                 Clock_start(messageTimeoutClockHandle);
             }
-            Trace_printf(hDisplaySerial, "Over Run detected");
+            Trace_printf("Over Run detected");
         }
         else if( events & NODE_EVENT_OVERRUN_RELEASED)
         {
@@ -310,14 +286,15 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
                 Clock_setPeriod(messageTimeoutClockHandle, msToClock(testConfigs[configIndex].period));
                 Clock_start(messageTimeoutClockHandle);
             }
-            Trace_printf(hDisplaySerial, "Over Run released");
+            Trace_printf("Over Run released");
         }
 
         if( events & NODE_EVENT_MOTION_DETECTION_START)
         {
-            Trace_printf(hDisplaySerial, "Motion detection start.");
+            Trace_printf("Motion detection start.");
             motionDetectionCountTry_ = 0;
             NodeTask_motionDetectionRun();
+            status_ &= ~NODE_STATUS_FLAG_MOTION_DETECTED;
         }
         if( events & NODE_EVENT_MOTION_DETECTION_RUN)
         {
@@ -331,11 +308,14 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         {
             MPU6050_stop();
             Clock_stop(postMotionDetectedClockHandle);
-            Trace_printf(hDisplaySerial, "Motion detection stop.");
+            status_ &= ~NODE_STATUS_FLAG_MOTION_DETECTED;
+            Trace_printf("Motion detection stop.");
         }
         else if( events & NODE_EVENT_MOTION_DETECTED)
         {
-            Trace_printf(hDisplaySerial, "Motion detected.");
+            Trace_printf("Motion detected.");
+
+            status_ |= NODE_STATUS_FLAG_MOTION_DETECTED;
 
             noitificationCountTry_ =  0;
 
@@ -417,6 +397,11 @@ void postMotionDetectedCallback(UArg arg0)
         Clock_stop(postMotionDetectedClockHandle);
         Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_START);
     }
+}
+
+uint8_t NodeTask_getStatus(void)
+{
+    return  status_;
 }
 
 void NodeTask_dataOn(void)
@@ -525,7 +510,8 @@ void    NodeTask_postNotification(uint8_t _type)
 
 void    NodeTask_postMotionDetected(void)
 {
-    SpiSlave_setNotification(RF_NOTI_MOTION_DETECTED);
+    Trace_printf("[NOTI] : Motion detected");
+    SpiSlave_setCommand(RF_IO_NOTI_MOTION_DETECTED);
 }
 
 void    NodeTask_eventTestTransferStart(void)
@@ -534,11 +520,11 @@ void    NodeTask_eventTestTransferStart(void)
     {
         Clock_start(transferTimeoutClockHandle);
         Clock_start(messageTimeoutClockHandle);
-        Trace_printf(hDisplaySerial, "Transfer started");
+        Trace_printf("Transfer started");
     }
     else
     {
-        Trace_printf(hDisplaySerial, "Transfer already started");
+        Trace_printf("Transfer already started");
     }
 }
 
@@ -548,11 +534,11 @@ void    NodeTask_eventTestTransferStop(void)
     {
         Clock_stop(transferTimeoutClockHandle);
         Clock_stop(messageTimeoutClockHandle);
-        Trace_printf(hDisplaySerial, "Transfer stopped");
+        Trace_printf("Transfer stopped");
     }
     else
     {
-        Trace_printf(hDisplaySerial, "Transfer not started");
+        Trace_printf("Transfer not started");
     }
 }
 
@@ -569,7 +555,7 @@ void    NodeTask_eventTestReset(void)
     if (NodeRadioTask_testReset() == NodeRadioStatus_Success)
     {
         configIndex = (configIndex + 1) % (sizeof(testConfigs) / sizeof(struct TestConfig));
-        Trace_printf(hDisplaySerial, "Test Reset : %08d %08d", testConfigs[configIndex].dataLength, testConfigs[configIndex].loopCount);
+        Trace_printf("Test Reset : %08d %08d", testConfigs[configIndex].dataLength, testConfigs[configIndex].loopCount);
 
         transferCount =  0;
         transferDataSize = 0;
@@ -580,7 +566,7 @@ void    NodeTask_eventTestReset(void)
     }
     else
     {
-        Trace_printf(hDisplaySerial, "Test Reset failed");
+        Trace_printf("Test Reset failed");
     }
 
     previousTransferTime = currentTransferTime;
@@ -590,7 +576,7 @@ void    NodeTask_motionDetectionRun(void)
 {
     ++motionDetectionCountTry_;
     MPU6050_start();
-    Trace_printf(hDisplaySerial, "motion detection Run[%d]", motionDetectionCountTry_);
+    Trace_printf("motion detection Run[%d]", motionDetectionCountTry_);
 }
 
 void    NodeTask_motionDetectionFinished(void)
@@ -688,18 +674,18 @@ void    NodeTask_eventPostTransfer(void)
             {
                 uint32_t    index = 0;
                 index = ((uint32_t)rawData[0] << 24) | ((uint32_t)rawData[1] << 16) | ((uint32_t)rawData[2] << 8) | (uint32_t)rawData[3];
-                Display_printf(hDisplaySerial, 0, 0, "Transfer error : %8x, %d", index, transferRetryCount++);
+                Trace_printf("Transfer error : %8x, %d", index, transferRetryCount++);
                 if (transferMaxRetryCount <= transferRetryCount)
                 {
                     DataQ_pop(NULL, 0, &length);
-                    Display_printf(hDisplaySerial, 0, 0, "Packet drop : %8x", index);
+                    Trace_printf("Packet drop : %8x", index);
                 }
             }
         }
 
         if (currentTransferTime / 1000 != previousTransferTime / 1000)
         {
-            Trace_printf(hDisplaySerial, "%8d %8d %8d %8d %8d %8d",
+            Trace_printf("%8d %8d %8d %8d %8d %8d",
                            transferCount, transferDataSize, transferSuccessCount,
                            totalTransferCount, totalTransferDataSize, totalTransferSuccessCount);
             transferCount =  0;
@@ -727,7 +713,12 @@ void    NodeTask_getRFStatus(NODETASK_STATUS* status)
 
 void    NodeTask_getConfig(NODETASK_CONFIG* config)
 {
+    config->shortAddress = nodeRadioTask_getNodeAddr();
+    int8_t power;
+    EasyLink_getRfPower(&power);
+    config->power = power;
     config->frequency = EasyLink_getFrequency();
+    config->timeout = nodeRadioTask_getAckTimeout();
 }
 
 

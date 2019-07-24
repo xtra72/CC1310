@@ -48,6 +48,9 @@ enum NodeRadioOperationStatus NodeRadioTask_sendRawData(uint8_t *data, uint16_t 
 enum NodeRadioOperationStatus NodeRadioTask_testReset(void);
 
 /* Get node address, return 0 if node address has not been set */
-uint8_t nodeRadioTask_getNodeAddr(void);
+uint8_t     nodeRadioTask_getNodeAddr(void);
+uint8_t     nodeRadioTask_setNodeAddr(uint8_t _addr);
+uint32_t    nodeRadioTask_getAckTimeout(void);
+uint32_t    nodeRadioTask_setAckTimeout(uint32_t _ackTimeout);
 
 #endif /* TASKS_NODERADIOTASKTASK_H_ */

@@ -23,7 +23,6 @@
 #include <ti/drivers/PIN.h>
 #include <ti/drivers/Power.h>
 #include <ti/drivers/pin/PINCC26XX.h>
-#include <ti/display/Display.h>
 
 /* Example/Board Header files */
 #include "Board.h"
@@ -54,8 +53,6 @@ PIN_Config interruptPinTable[] = {
     PIN_TERMINATE
 };
 
-extern  Display_Handle hDisplaySerial;
-
 static  uint8_t         slaveId_ = 0x68;
 static  I2C_Handle      i2c_;
 static  uint8_t         txBuffer[MPU6050_BUFFER_LENGTH_MAX];
@@ -85,7 +82,7 @@ void MPU6050_interruptCallbackFxn(PIN_Handle handle, PIN_Id pinId)
     {
 //        currVal =  PIN_getInputValue(pinId);
 
-//        Trace_printf(hDisplaySerial, "Interrupt occurred.");
+//        Trace_printf("Interrupt occurred.");
         PIN_setInterrupt(interruptHandle, PIN_IRQ_DIS);
 
         sem_post(&fifoFull_);
@@ -108,7 +105,7 @@ bool    MPU6050_write8(uint8_t address, uint8_t value)
     if (!I2C_transfer(i2c_, &i2cTransaction))
     {
         sem_post(&lock_);
-        Trace_printf(hDisplaySerial, "I2C Bus fault.");
+        Trace_printf("I2C Bus fault.");
         ret = false;
     }
     else
@@ -120,13 +117,13 @@ bool    MPU6050_write8(uint8_t address, uint8_t value)
         if (!I2C_transfer(i2c_, &i2cTransaction))
         {
             sem_post(&lock_);
-            Trace_printf(hDisplaySerial, "I2C Bus fault.");
+            Trace_printf("I2C Bus fault.");
             ret = false;
         }
         else
         {
 #if 0
-            Trace_printf(hDisplaySerial, "%02x : %d|%d|%d|%d|%d|%d|%d|%d",  ((uint8_t *)i2cTransaction.readBuf)[0],
+            Trace_printf("%02x : %d|%d|%d|%d|%d|%d|%d|%d",  ((uint8_t *)i2cTransaction.readBuf)[0],
                  (((uint8_t *)i2cTransaction.readBuf)[0] >> 7) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 6) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 5) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 4) & 1,
                  (((uint8_t *)i2cTransaction.readBuf)[0] >> 3) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 2) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 1) & 1, (((uint8_t *)i2cTransaction.readBuf)[0] >> 0) & 1);
 #endif
@@ -150,7 +147,7 @@ bool    MPU6050_read8(uint8_t address, uint8_t *value)
 
     if (!I2C_transfer(i2c_, &i2cTransaction))
     {
-        Trace_printf(hDisplaySerial, "I2C Bus fault.");
+        Trace_printf("I2C Bus fault.");
         ret = false;
     }
     else
@@ -177,7 +174,7 @@ bool    MPU6050_write16(uint8_t address, uint16_t value)
 
     if (!I2C_transfer(i2c_, &i2cTransaction))
     {
-        Trace_printf(hDisplaySerial, "I2C Bus fault.");
+        Trace_printf("I2C Bus fault.");
         ret = false;
     }
 
@@ -198,7 +195,7 @@ bool    MPU6050_read16(uint8_t address, uint16_t *value)
 
     if (!I2C_transfer(i2c_, &i2cTransaction))
     {
-        Trace_printf(hDisplaySerial, "I2C Bus fault.");
+        Trace_printf("I2C Bus fault.");
         ret = false;
     }
     else
@@ -225,7 +222,7 @@ bool    MPU6050_writeArray(uint8_t address, uint8_t *values, uint8_t length)
     if (!I2C_transfer(i2c_, &i2cTransaction))
     {
         sem_post(&lock_);
-        Trace_printf(hDisplaySerial, "I2C Bus fault.");
+        Trace_printf("I2C Bus fault.");
         ret = false;
     }
 
@@ -246,7 +243,7 @@ bool    MPU6050_readArray(uint8_t address, uint8_t *values, uint8_t length)
 
     if (!I2C_transfer(i2c_, &i2cTransaction))
     {
-        Trace_printf(hDisplaySerial, "I2C Bus fault.");
+        Trace_printf("I2C Bus fault.");
         ret = false;
     }
     else
@@ -404,7 +401,7 @@ bool    MPU6050_popValue(uint8_t type, double* value)
 
 bool    MPU6050_start(void)
 {
-    Trace_printf(hDisplaySerial, "Start Motion Detection");
+    Trace_printf("Start Motion Detection");
     MPU6050_write8(MPU6050_FIFO_CTRL, MPU6050_FIFO_CTRL_ACCL);
     MPU6050_write8(MPU6050_INT_ENABLE, MPU6050_INT_ENABLE_FIFO_OVERFLOW);
     MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_RESET);
@@ -429,7 +426,7 @@ bool    MPU6050_start(void)
 
 bool    MPU6050_stop(void)
 {
-    Trace_printf(hDisplaySerial, "Stop Motion Detection");
+    Trace_printf("Stop Motion Detection");
     PIN_setInterrupt(interruptHandle, PIN_IRQ_DIS);
 
     MPU6050_write8(MPU6050_INT_ENABLE, 0);
@@ -445,7 +442,7 @@ void    MPU6050_showRegister(uint8_t address, char *name)
 
     if (MPU6050_read8(MPU6050_INT_STATUS, &value8))
     {
-        Trace_printf(hDisplaySerial, "%s : %d|%d|%d|%d|%d|%d|%d|%d", name,
+        Trace_printf("%s : %d|%d|%d|%d|%d|%d|%d|%d", name,
              (value8 >> 7) & 1, (value8 >> 6) & 1, (value8 >> 5) & 1, (value8 >> 4) & 1,
              (value8 >> 3) & 1, (value8 >> 2) & 1, (value8 >> 1) & 1, (value8 >> 0) & 1);
     }
@@ -460,7 +457,7 @@ float    MPU6050_getOscillationValue(void)
 
     if (!MPU6050_fifoCount(&fifoCount))
     {
-        Trace_printf(hDisplaySerial, "Failed to get fifo count.");
+        Trace_printf("Failed to get fifo count.");
         return  0;
     }
 
@@ -478,7 +475,7 @@ float    MPU6050_getOscillationValue(void)
                 max = value;
         }
     }
-    Trace_printf(hDisplaySerial, "Min, Max : %f, %f", min, max);
+    Trace_printf("Min, Max : %f, %f", min, max);
 
     return  (max - min);
 }
@@ -499,13 +496,13 @@ bool    MPU6050_init(void)
 
     if (sem_init(&lock_, 0, 1) != 0)
     {
-        Trace_printf(hDisplaySerial, "Error creating lock_\n");
+        Trace_printf("Error creating lock_\n");
         return  false;
     }
 
     if (sem_init(&fifoFull_, 0, 0) != 0)
     {
-        Trace_printf(hDisplaySerial, "Error creating fifoFull_\n");
+        Trace_printf("Error creating fifoFull_\n");
         return  false;
     }
 
@@ -515,7 +512,7 @@ bool    MPU6050_init(void)
     i2c_ = I2C_open(Board_I2C_TMP, &i2cParams);
     if (i2c_ == NULL)
     {
-        Trace_printf(hDisplaySerial, "Error Initializing I2C\n");
+        Trace_printf("Error Initializing I2C\n");
         return  false;
     }
 

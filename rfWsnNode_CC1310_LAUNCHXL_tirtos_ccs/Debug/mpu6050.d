@@ -50,8 +50,6 @@ mpu6050.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/dri
 mpu6050.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/../driverlib/rom.h
 mpu6050.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/gpio.h
 mpu6050.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/../inc/hw_gpio.h
-mpu6050.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/display/Display.h
-mpu6050.obj: C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdarg.h
 mpu6050.obj: ../Board.h
 mpu6050.obj: C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/Board.h
 mpu6050.obj: ../CC1310_LAUNCHXL.h
@@ -116,8 +114,6 @@ C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/../inc
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/../driverlib/rom.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/gpio.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/devices/cc13x0/driverlib/../inc/hw_gpio.h: 
-C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/display/Display.h: 
-C:/ti/ccs901/ccs/tools/compiler/ti-cgt-arm_18.12.1.LTS/include/stdarg.h: 
 ../Board.h: 
 C:/ti/simplelink_cc13x0_sdk_3_10_00_11/source/ti/drivers/Board.h: 
 ../CC1310_LAUNCHXL.h: 

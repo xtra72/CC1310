@@ -22,13 +22,37 @@
 #define DebugP_LOG_ENABLED 0
 #endif
 
+/* Display driver handles */
+Display_Handle hDisplaySerial = NULL;
+
 #include <ti/drivers/dpl/DebugP.h>
 
-void  Trace_printf(Display_Handle handle, char *fmt, ...)
+void    Trace_init(void)
+{
+    /* Initialize display and try to open both UART and LCD types of display. */
+    Display_Params params;
+    Display_Params_init(&params);
+    params.lineClearMode = DISPLAY_CLEAR_BOTH;
+
+    /* Open an UART display.
+     * Whether the open call is successful depends on what is present in the
+     * Display_config[] array of the board file.
+     *
+     * Note that for SensorTag evaluation boards combined with the SHARP96x96
+     * Watch DevPack, there is a pin conflict with UART such that one must be
+     * excluded, and UART is preferred by default. To display on the Watch
+     * DevPack, add the precompiler define BOARD_DISPLAY_EXCLUDE_UART.
+     */
+    hDisplaySerial = Display_open(Display_Type_UART, &params);
+}
+
+
+
+void  Trace_printf(char *fmt, ...)
 {
     static  char    newFmt[512];
 
-    if (NULL == handle)
+    if (NULL == hDisplaySerial)
     {
         DebugP_log0("Trying to use NULL-handle.");
         return;
@@ -42,7 +66,7 @@ void  Trace_printf(Display_Handle handle, char *fmt, ...)
     va_list va;
     va_start(va, fmt);
 
-    handle->fxnTablePtr->vprintfFxn(handle, 0, 0, newFmt, va);
+    hDisplaySerial->fxnTablePtr->vprintfFxn(hDisplaySerial, 0, 0, newFmt, va);
 
     va_end(va);
 }

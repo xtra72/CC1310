@@ -66,6 +66,7 @@
 #include "NodeTask.h"
 #include "crc16.h"
 #include "rf.h"
+#include "trace.h"
 
 #include <ti/devices/DeviceFamily.h>
 #include DeviceFamily_constructPath(driverlib/aon_batmon.h)
@@ -90,6 +91,7 @@
 #define RADIO_EVENT_COMMAND_STOP_TRANSFER   (uint32_t)(1 << 11)
 #define RADIO_EVENT_COMMAND_START_MOTION    (uint32_t)(1 << 12)
 #define RADIO_EVENT_COMMAND_STOP_MOTION     (uint32_t)(1 << 13)
+#define RADIO_EVENT_COMMAND_SLEEP           (uint32_t)(1 << 14)
 
 #define NODERADIO_MAX_RETRIES 2
 #define NORERADIO_ACK_TIMEOUT_TIME_MS (160)
@@ -119,13 +121,10 @@ static struct RadioOperation currentRadioOperation;
 static uint8_t  *rawData = NULL;
 static uint16_t rawDataLength = 0;
 static uint8_t  nodeAddress = 0;
+static  uint32_t    ackTimeout = NORERADIO_ACK_TIMEOUT_TIME_MS;
 
 /* Pin driver handle */
 extern PIN_Handle ledPinHandle;
-
-/* Display driver handles */
-extern  Display_Handle hDisplaySerial;
-
 
 /***** Prototypes *****/
 static void nodeRadioTaskFunction(UArg arg0, UArg arg1);
@@ -162,9 +161,28 @@ void NodeRadioTask_init(void) {
     Task_construct(&nodeRadioTask, nodeRadioTaskFunction, &nodeRadioTaskParams, NULL);
 }
 
+uint32_t    nodeRadioTask_getAckTimeout(void)
+{
+    return  ackTimeout;
+}
+
+uint32_t    nodeRadioTask_setAckTimeout(uint32_t _ackTimeout)
+{
+    ackTimeout = _ackTimeout;
+
+    return  ackTimeout;
+}
+
 uint8_t nodeRadioTask_getNodeAddr(void)
 {
     return nodeAddress;
+}
+
+uint8_t     nodeRadioTask_setNodeAddr(uint8_t _addr)
+{
+    nodeAddress = _addr;
+
+    return  nodeAddress;
 }
 
 static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
@@ -212,11 +230,11 @@ static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
         /* If we should send ADC data */
         if (events & RADIO_EVENT_SEND_RAW_DATA)
         {
-            sendRawData(rawData, rawDataLength, RADIO_PACKET_OPTIONS_CRC, NODERADIO_MAX_RETRIES, NORERADIO_ACK_TIMEOUT_TIME_MS);
+            sendRawData(rawData, rawDataLength, RADIO_PACKET_OPTIONS_CRC, NODERADIO_MAX_RETRIES, ackTimeout);
         }
         else if (events & RADIO_EVENT_TEST_RESET)
         {
-            sendTestReset(NODERADIO_MAX_RETRIES, NORERADIO_ACK_TIMEOUT_TIME_MS);
+            sendTestReset(NODERADIO_MAX_RETRIES, ackTimeout);
         }
 
         if (events & RADIO_EVENT_COMMAND_START_SCAN)
@@ -455,7 +473,7 @@ static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status)
             {
                 uint32_t    offset = sizeof(struct AckPacket);
 
-                Trace_printf(hDisplaySerial, "Ack with Command = %d\n",rxPacket->payload[offset + 1]);
+                Trace_printf("Ack with Command = %d\n",rxPacket->payload[offset + 1]);
 
                 if (rxPacket->payload[offset + 1] == RF_REQ_SRV_SCAN_START)
                 {
@@ -480,6 +498,10 @@ static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status)
                 else if (rxPacket->payload[offset + 1] == RF_REQ_SRV_MOTION_DETECTION_STOP)
                 {
                     Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_STOP_MOTION);
+                }
+                else if (rxPacket->payload[offset + 1] == RF_REQ_SRV_SLEEP)
+                {
+                    Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_SLEEP);
                 }
             }
         }

@@ -9,6 +9,7 @@
 #define TRACE_H_
 
 
-void  Trace_printf(Display_Handle handle, char *fmt, ...);
+void    Trace_init(void);
+void    Trace_printf(char *fmt, ...);
 
 #endif /* TRACE_H_ */

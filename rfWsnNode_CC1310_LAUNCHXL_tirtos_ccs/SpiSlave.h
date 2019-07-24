@@ -47,5 +47,6 @@ typedef struct
 
 bool    SpiSlave_init(void);
 
+bool    SpiSlave_setCommand(uint8_t cmd);
 bool    SpiSlave_setNotification(uint8_t cmd);
 #endif /* SPISLAVE_H_ */

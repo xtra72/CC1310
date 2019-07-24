@@ -48,6 +48,7 @@
 #include "NodeTask.h"
 #include "SpiSlave.h"
 #include "mpu6050.h"
+#include "trace.h"
 /*
  *  ======== main ========
  */
@@ -58,6 +59,7 @@ int main(void)
     Display_init();
 
     /* Initialize sensor node tasks */
+    Trace_init();
     NodeRadioTask_init();
     NodeTask_init();
     SpiSlave_init();
