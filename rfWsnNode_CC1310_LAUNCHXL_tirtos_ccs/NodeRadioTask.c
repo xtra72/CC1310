@@ -92,6 +92,7 @@
 #define RADIO_EVENT_COMMAND_START_MOTION    (uint32_t)(1 << 12)
 #define RADIO_EVENT_COMMAND_STOP_MOTION     (uint32_t)(1 << 13)
 #define RADIO_EVENT_COMMAND_SLEEP           (uint32_t)(1 << 14)
+#define RADIO_EVENT_DOWNLINK                (uint32_t)(1 << 15)
 
 #define NODERADIO_MAX_RETRIES 2
 #define NORERADIO_ACK_TIMEOUT_TIME_MS (160)
@@ -122,6 +123,8 @@ static uint8_t  *rawData = NULL;
 static uint16_t rawDataLength = 0;
 static uint8_t  nodeAddress = 0;
 static  uint32_t    ackTimeout = NORERADIO_ACK_TIMEOUT_TIME_MS;
+static  uint8_t downlinkData[64];
+static  uint8_t downlinkLength = 0;
 
 /* Pin driver handle */
 extern PIN_Handle ledPinHandle;
@@ -260,6 +263,10 @@ static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
         else if (events & RADIO_EVENT_COMMAND_STOP_MOTION)
         {
             NodeTask_motionStop();
+        }
+        else if (events & RADIO_EVENT_DOWNLINK)
+        {
+            NodeTask_downlink(downlinkData, downlinkLength);
         }
 
         /* If we get an ACK from the concentrator */
@@ -502,6 +509,15 @@ static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status)
                 else if (rxPacket->payload[offset + 1] == RF_REQ_SRV_SLEEP)
                 {
                     Event_post(radioOperationEventHandle, RADIO_EVENT_COMMAND_SLEEP);
+                }
+                else if (rxPacket->payload[offset + 1] == RF_DOWNLINK)
+                {
+                    if (rxPacket->payload[offset+2] < 60)
+                    {
+                        downlinkLength = rxPacket->payload[offset+2];
+                        memcpy(downlinkData, &rxPacket->payload[offset+3], downlinkLength);
+                        Event_post(radioOperationEventHandle, RADIO_EVENT_DOWNLINK);
+                    }
                 }
             }
         }

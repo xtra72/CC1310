@@ -25,6 +25,7 @@
 #define RF_REP_ACK                          (RF_REPLY + 1)
 #define RF_REP_NACK                         (RF_REPLY + 2)
 #define RF_REP_PING                         (RF_REPLY + 3)
+#define RF_DOWNLINK                         (RF_REPLY + 5)
 
 #define RF_NOTIFY                           (0x90)
 #define RF_NOTI_MOTION_DETECTED             (RF_NOTIFY + 1)

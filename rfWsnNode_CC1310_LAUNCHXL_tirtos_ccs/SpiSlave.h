@@ -23,6 +23,8 @@
 #define RF_IO_REP_ACK                   0x81
 #define RF_IO_REP_NACK                  0x82
 
+#define RF_IO_DOWNLINK                  0x84
+
 #define RF_IO_REP_GET_CONFIG            0x91
 #define RF_IO_REP_SET_CONFIG            0x92
 
@@ -49,4 +51,5 @@ bool    SpiSlave_init(void);
 
 bool    SpiSlave_setCommand(uint8_t cmd);
 bool    SpiSlave_setNotification(uint8_t cmd);
+bool    SpiSlave_downlink(uint8_t* data, uint8_t length);
 #endif /* SPISLAVE_H_ */

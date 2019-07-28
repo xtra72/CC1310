@@ -19,6 +19,14 @@
 #define RF_NOTI_TO_SERVER                   (0x30)
 #define RF_NOTI_HOST_MOTION_DETECTED        (RF_NOTI_TO_SERVER + 1)
 
+
+#define RF_REPLY                            (0x80)
+#define RF_REP_ACK                          (RF_REPLY + 1)
+#define RF_REP_NACK                         (RF_REPLY + 2)
+#define RF_REP_PING                         (RF_REPLY + 3)
+#define RF_REP_CONTRACT                     (RF_REPLY + 4)
+#define RF_DOWNLINK                         (RF_REPLY + 5)
+
 #define RF_REQUEST_FROM_SERVER              (0xA0)
 #define RF_REQ_SRV_MOTION_DETECTION_START   (RF_REQUEST_FROM_SERVER + 1)
 #define RF_REQ_SRV_MOTION_DETECTION_STOP    (RF_REQUEST_FROM_SERVER + 2)

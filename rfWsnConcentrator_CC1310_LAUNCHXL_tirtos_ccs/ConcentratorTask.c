@@ -120,6 +120,7 @@ static struct AdcSensorNode latestActiveAdcSensorNode;
 static struct RawDataNode   latestRawDataNode;
 struct AdcSensorNode knownSensorNodes[CONCENTRATOR_MAX_NODES];
 static struct AdcSensorNode* lastAddedSensorNode = knownSensorNodes;
+static  char buffer[256] = {0,};
 
 static DataQ        dataQ_;
 static  uint32_t    previousReceivedTime = 0;
@@ -203,7 +204,6 @@ static void ConcentratorTask_main(UArg arg0, UArg arg1)
             totalReceivedDataSize += latestRawDataNode.length;
             totalSuccessfullyReceivedPacket++;
 
-            static  char buffer[256] = {0,};
             for(i = 0 ; i < latestRawDataNode.length ; i++)
             {
                 uint8_t hi = (latestRawDataNode.data[i] >> 4) & 0x0F;
@@ -426,6 +426,93 @@ bool    ConcentratorTask_commandStatus(int argc, char *argv[])
     else
     {
         ShellTask_output("+%s:RSSI=%d", argv[0], ConcentratorRadioTask_getRssi());
+    }
+
+    return true;
+}
+
+bool    ConcentratorTask_commandDownlink(int argc, char *argv[])
+{
+    if (argc != 3)
+    {
+        ShellTask_output("+%s:ERR", argv[0]);
+        return  false;
+    }
+
+    uint8_t device_id = (uint8_t)strtoul(argv[1], NULL, 10);
+    if (device_id == 0)
+    {
+        device_id = 2;
+    }
+
+    uint8_t length = 0;
+    uint8_t i;
+    for(i = 0 ; i < strlen(argv[2]) / 2 ; i++)
+    {
+        uint8_t value = 0;
+
+        if ('0' <= argv[2][i*2] && argv[2][i*2] <= '9')
+        {
+            value = (argv[2][i*2] - '0');
+        }
+        else if ('a' <= argv[2][i*2] && argv[2][i*2] <= 'f')
+        {
+            value = (argv[2][i*2] - 'a' + 10);
+        }
+        else if ('A' <= argv[2][i*2] && argv[2][i*2] <= 'F')
+        {
+            value = (argv[2][i*2] - 'A' + 10);
+        }
+
+        if ('0' <= argv[2][i*2 + 1] && argv[2][i*2 + 1] <= '9')
+        {
+            value = (value << 4) + (argv[2][i*2 + 1] - '0');
+        }
+        else if ('a' <= argv[2][i*2] && argv[2][i*2 + 1] <= 'f')
+        {
+            value = (value << 4) + (argv[2][i*2 + 1] - 'a' + 10);
+        }
+        else if ('A' <= argv[2][i*2 + 1] && argv[2][i*2 + 1] <= 'F')
+        {
+            value = (value << 4) + (argv[2][i*2 + 1] - 'A' + 10);
+        }
+
+        buffer[length++] = value;
+    }
+
+   if (!ConcentratorTask_sendCommand(device_id, RF_DOWNLINK, (uint8_t *)buffer, length))
+    {
+        ShellTask_output("+%s:ERR", argv[0]);
+        return  false;
+    }
+
+    return true;
+}
+
+bool    ConcentratorTask_commandContract(int argc, char *argv[])
+{
+    if (argc != 3)
+    {
+        ShellTask_output("+%s:ERR", argv[0]);
+        return  false;
+    }
+
+    uint8_t device_id = (uint8_t)strtoul(argv[1], NULL, 10);
+    if (device_id == 0)
+    {
+        device_id = 2;
+    }
+
+    uint32_t ts = (uint32_t)strtoul(argv[2], NULL, 10);
+    uint8_t params[4];
+    params[0] = (ts >> 24) & 0xFF;
+    params[1] = (ts >> 16) & 0xFF;
+    params[2] = (ts >>  8) & 0xFF;
+    params[3] = (ts      ) & 0xFF;
+   if (!ConcentratorTask_sendCommand(device_id, RF_REP_CONTRACT, params, sizeof(params)))
+    {
+        ShellTask_output("+%s:ERR", argv[0]);
+        return  false;
     }
 
     return true;

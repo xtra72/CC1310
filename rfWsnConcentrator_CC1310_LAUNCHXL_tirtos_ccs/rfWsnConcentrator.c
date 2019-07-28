@@ -78,9 +78,11 @@ const ShellTaskCommand    commandList_[] =
 {
     {   .name = "cfg", .command = ConcentratorTask_commandConfig    },
     {   .name = "stat", .command = ConcentratorTask_commandStatus   },
-    {   .name = "scan", .command = ConcentratorTask_commandScan },
+    {   .name = "cont", .command = ConcentratorTask_commandContract },
+    {   .name = "dl", .command = ConcentratorTask_commandDownlink   },
+    {   .name = "scan", .command = ConcentratorTask_commandScan     },
     {   .name = "sleep", .command = ConcentratorTask_commandSleep   },
-    {   .name = "detect", .command = ConcentratorTask_commandDetect   }
+    {   .name = "detect", .command = ConcentratorTask_commandDetect }
 };
 
 int main(void)

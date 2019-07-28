@@ -90,6 +90,7 @@
 #define NODE_EVENT_SRV_NOTI_SCAN_STOP                 (uint32_t)(1 << 17)
 #define NODE_EVENT_SRV_NOTI_MOTION_DETECTION_START    (uint32_t)(1 << 18)
 #define NODE_EVENT_SRV_NOTI_MOTION_DETECTION_STOP     (uint32_t)(1 << 19)
+#define NODE_EVENT_DOWNLINK                             (uint32_t)(1 << 20)
 
 #define NODE_EVENT_MOTION_DETECTION_FINISHED            (uint32_t)(1 << 21)
 
@@ -172,6 +173,9 @@ static  uint32_t    noitificationCountMax_ = 10;
 
 static  uint8_t     directTransferData[128];
 static  uint32_t    directTransferDataLength = 0;
+
+static  uint8_t     downlinkData[128];
+static  uint8_t     downlinkLength = 0;
 
 #define msToClock(ms) ((ms) * 1000 / Clock_tickPeriod)
 
@@ -322,6 +326,12 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
             NodeTask_postMotionDetected();
             Clock_setPeriod(postMotionDetectedClockHandle, msToClock(10000));
             Clock_start(postMotionDetectedClockHandle);
+        }
+        else if( events & NODE_EVENT_DOWNLINK)
+        {
+            Trace_printf("Downlink : %d.", downlinkLength);
+
+            SpiSlave_downlink(downlinkData, downlinkLength);
         }
 
         if( events & NODE_EVENT_SRV_NOTI_SCAN_START)
@@ -632,6 +642,14 @@ void    NodeTask_motionStart(void)
 void    NodeTask_motionStop(void)
 {
     Event_post(nodeEventHandle, NODE_EVENT_SRV_NOTI_MOTION_DETECTION_STOP);
+}
+
+void    NodeTask_downlink(uint8_t* data, uint8_t length)
+{
+    memcpy(downlinkData, data, length);
+    downlinkLength = length;
+
+    Event_post(nodeEventHandle, NODE_EVENT_DOWNLINK);
 }
 
 void    NodeTask_eventDataTransfer(void)

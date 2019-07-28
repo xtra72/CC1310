@@ -54,6 +54,9 @@ typedef union
 static  uint8_t commandForMaster = 0;
 static  uint8_t notifyForMaster = 0;
 
+static  uint8_t downlinkData[128];
+static  uint8_t downlinkLength = 0;
+
 bool SPI_isValidFrame(SPI_Frame* frame);
 
 /* Pin driver handle */
@@ -301,7 +304,14 @@ void *slaveThread(void *arg0)
 
                 if (txBuffer.frame.cmd == 0)
                 {
-                    if (commandForMaster != 0)
+                    if (downlinkLength != 0)
+                    {
+                        txBuffer.frame.cmd = RF_IO_DOWNLINK;
+                        txBuffer.frame.len = downlinkLength;
+                        memcpy(txBuffer.frame.payload, downlinkData, downlinkLength);
+                        downlinkLength = 0;
+                    }
+                    else if (commandForMaster != 0)
                     {
                         txBuffer.frame.cmd = commandForMaster;
                         commandForMaster = 0;
@@ -423,6 +433,14 @@ bool    SpiSlave_setCommand(uint8_t cmd)
 bool    SpiSlave_setNotification(uint8_t notify)
 {
     notifyForMaster = notify;
+
+    return  true;
+}
+
+bool    SpiSlave_downlink(uint8_t* data, uint8_t length)
+{
+    memcpy(downlinkData, data, length);
+    downlinkLength = length;
 
     return  true;
 }

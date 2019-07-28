@@ -77,6 +77,8 @@ void    NodeTask_transferStop(void);
 void    NodeTask_motionStart(void);
 void    NodeTask_motionStop(void);
 
+void    NodeTask_downlink(uint8_t* data, uint8_t length);
+
 void NodeTask_wakeup(void);
 
 void    NodeTask_getConfig(NODETASK_CONFIG* config);
