@@ -63,6 +63,8 @@ void NodeTask_dataOn(void);
 bool NodeTask_dataTransfer(uint8_t* buffer, uint32_t length);
 bool NodeTask_postTransfer(uint8_t* buffer, uint32_t length);
 
+void    NodeTask_radioStart(void);
+
 void NodeTask_testTransferStart(void);
 void NodeTask_testTransferStop(void);
 
@@ -72,19 +74,19 @@ bool NodeTask_motionDetectionStop(void);
 void NodeTask_scanStart(void);
 void NodeTask_scanStop(void);
 
-void    NodeTask_transferStart(void);
-void    NodeTask_transferStop(void);
-void    NodeTask_motionStart(void);
-void    NodeTask_motionStop(void);
+void NodeTask_transferStart(void);
+void NodeTask_transferStop(void);
+void NodeTask_motionStart(void);
+void NodeTask_motionStop(void);
 
-void    NodeTask_downlink(uint8_t* data, uint8_t length);
+void NodeTask_downlink(uint8_t* data, uint8_t length);
 
 void NodeTask_wakeup(void);
 
-void    NodeTask_getConfig(NODETASK_CONFIG* config);
-bool    NodeTask_setConfig(NODETASK_CONFIG* config);
+void NodeTask_getConfig(NODETASK_CONFIG* config);
+bool NodeTask_setConfig(NODETASK_CONFIG* config);
 
-void    NodeTask_getRFStatus(NODETASK_STATUS* status);
+void NodeTask_getRFStatus(NODETASK_STATUS* status);
 
 uint32_t NodeTask_getQueueSize(void);
 

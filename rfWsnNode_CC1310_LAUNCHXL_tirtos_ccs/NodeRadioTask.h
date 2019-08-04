@@ -35,6 +35,12 @@
 
 #include "stdint.h"
 
+typedef struct
+{
+    uint32_t    frequency;
+    uint32_t    power;
+}   NodeRadioConfig;
+
 enum NodeRadioOperationStatus {
     NodeRadioStatus_Success,
     NodeRadioStatus_Failed,
@@ -42,7 +48,7 @@ enum NodeRadioOperationStatus {
 };
 
 /* Initializes the NodeRadioTask and creates all TI-RTOS objects */
-void NodeRadioTask_init(void);
+void NodeRadioTask_init(NodeRadioConfig* config);
 
 enum NodeRadioOperationStatus NodeRadioTask_sendRawData(uint8_t *data, uint16_t length);
 enum NodeRadioOperationStatus NodeRadioTask_testReset(void);

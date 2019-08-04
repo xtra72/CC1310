@@ -410,6 +410,11 @@ bool    ConcentratorTask_commandConfig(int argc, char *argv[])
                     }
                 }
             }
+            else
+            {
+                ShellTask_output("+%s:ERR", argv[0]);
+                break;
+            }
         }
 
     }
@@ -430,6 +435,15 @@ bool    ConcentratorTask_commandStatus(int argc, char *argv[])
 
     return true;
 }
+
+
+bool    ConcentratorTask_commandStart(int argc, char *argv[])
+{
+    ConcentratorRadioTask_init(NULL);
+
+    return  true;
+}
+
 
 bool    ConcentratorTask_commandDownlink(int argc, char *argv[])
 {

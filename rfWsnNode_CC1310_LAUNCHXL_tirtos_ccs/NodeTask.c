@@ -93,6 +93,7 @@
 #define NODE_EVENT_DOWNLINK                             (uint32_t)(1 << 20)
 
 #define NODE_EVENT_MOTION_DETECTION_FINISHED            (uint32_t)(1 << 21)
+#define NODE_EVENT_RADIO_START                          (uint32_t)(1 << 22)
 
 #define TRANSFER_EVENT_ALL              0xFFFFFFFF
 #define TRANSFER_EVENT_SUCCESS          (uint32_t)(1 << 1)
@@ -241,6 +242,7 @@ void NodeTask_init(void)
     Task_construct(&nodeTask, nodeTaskFunction, &nodeTaskParams, NULL);
 }
 
+
 static void nodeTaskFunction(UArg arg0, UArg arg1)
 {
     MPU6050_init();
@@ -251,6 +253,11 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         uint32_t events = Event_pend(nodeEventHandle, 0, NODE_EVENT_ALL, 100000);
 
         /* If new ADC value, send this data */
+        if (events & NODE_EVENT_RADIO_START)
+        {
+//         NodeRadioTask_init(NULL);
+        }
+
         if (events & NODE_EVENT_TEST_TRANSFER_START)
         {
             NodeTask_eventTestTransferStart();
@@ -612,6 +619,11 @@ void    NodeTask_motionDetectionFinished(void)
 void    NodeTask_notifyMotionDetectionFinished(void)
 {
     Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_FINISHED);
+}
+
+void    NodeTask_radioStart(void)
+{
+    Event_post(nodeEventHandle, NODE_EVENT_RADIO_START);
 }
 
 void    NodeTask_scanStart(void)

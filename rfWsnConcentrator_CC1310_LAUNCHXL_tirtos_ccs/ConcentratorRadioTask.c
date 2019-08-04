@@ -135,9 +135,19 @@ PIN_Config ledPinTable[] = {
     PIN_TERMINATE
 };
 
-/***** Function definitions *****/
-void ConcentratorRadioTask_init(void) {
+static  ConcentratorRadioConfig _config =
+{
+     .frequency = 920000000,
+     .power = 14
+};
 
+/***** Function definitions *****/
+void ConcentratorRadioTask_init(ConcentratorRadioConfig* config) {
+
+    if (config != NULL)
+    {
+        memcpy(&_config, config, sizeof(ConcentratorRadioConfig));
+    }
     /* Open LED pins */
     ledPinHandle = PIN_open(&ledPinState, ledPinTable);
 	if (!ledPinHandle)

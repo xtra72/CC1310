@@ -50,6 +50,11 @@
 #include "stdint.h"
 #include "RadioProtocol.h"
 
+typedef struct
+{
+    uint32_t    frequency;
+    uint32_t    power;
+} ConcentratorRadioConfig;
 
 enum ConcentratorRadioOperationStatus {
     ConcentratorRadioStatus_Success,
@@ -66,7 +71,7 @@ union ConcentratorPacket {
 typedef void (*ConcentratorRadio_PacketReceivedCallback)(union ConcentratorPacket* packet, int8_t rssi);
 
 /* Create the ConcentratorRadioTask and creates all TI-RTOS objects */
-void ConcentratorRadioTask_init(void);
+void ConcentratorRadioTask_init(ConcentratorRadioConfig* config);
 
 /* Register the packet received callback */
 void ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorRadio_PacketReceivedCallback callback);

@@ -120,7 +120,7 @@ void ShellTask_init(ShellTaskCommand _commandList[], uint32_t _count)
     uartParams.readReturnMode = UART_RETURN_FULL;
     uartParams.readEcho = UART_ECHO_ON;
     uartParams.readCallback = ShellTask_readCallback;
-    uartParams.baudRate = 921600;
+    uartParams.baudRate = 115200;
 
     uart = UART_open(Board_UART0, &uartParams);
 

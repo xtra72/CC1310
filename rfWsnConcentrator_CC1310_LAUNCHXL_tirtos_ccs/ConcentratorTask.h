@@ -54,6 +54,7 @@ bool ConcentratorTask_sendCommand(uint8_t _device_id, uint8_t cmd, uint8_t *_par
 
 bool ConcentratorTask_commandConfig(int argc, char *argv[]);
 bool ConcentratorTask_commandStatus(int argc, char *argv[]);
+bool ConcentratorTask_commandStart(int argc, char *argv[]);
 bool ConcentratorTask_commandDownlink(int argc, char *argv[]);
 bool ConcentratorTask_commandContract(int argc, char *argv[]);
 bool ConcentratorTask_commandScan(int argc, char *argv[]);

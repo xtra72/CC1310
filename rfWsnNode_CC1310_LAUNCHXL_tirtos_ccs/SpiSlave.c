@@ -220,12 +220,22 @@ void *slaveThread(void *arg0)
 
                 switch(rxBuffer.frame.cmd)
                 {
+                case    RF_IO_PING:
+                    {
+                    }
+                    break;
                 case    RF_IO_TX_DATA:
                     {
                         if (!NodeTask_postTransfer(rxBuffer.frame.payload, rxBuffer.frame.len))
                         {
                             Trace_printf("Data Tranfer Failed!");
                         }
+                    }
+                    break;
+
+                case    RF_IO_RADIO_START:
+                    {
+                        NodeTask_radioStart();
                     }
                     break;
 

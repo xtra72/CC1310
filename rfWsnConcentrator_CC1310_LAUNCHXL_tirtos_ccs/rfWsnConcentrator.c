@@ -78,6 +78,7 @@ const ShellTaskCommand    commandList_[] =
 {
     {   .name = "cfg", .command = ConcentratorTask_commandConfig    },
     {   .name = "stat", .command = ConcentratorTask_commandStatus   },
+    {   .name = "start", .command = ConcentratorTask_commandStart   },
     {   .name = "cont", .command = ConcentratorTask_commandContract },
     {   .name = "dl", .command = ConcentratorTask_commandDownlink   },
     {   .name = "scan", .command = ConcentratorTask_commandScan     },
@@ -96,8 +97,9 @@ int main(void)
 //    SPI_init();
 
     /* Initialize concentrator tasks */
-    ConcentratorRadioTask_init();
     ConcentratorTask_init();
+    ConcentratorRadioTask_init(NULL);
+
     ShellTask_init(commandList_, sizeof(commandList_) / sizeof(ShellTaskCommand));
 
     /* Start BIOS */

@@ -126,6 +126,12 @@ static  uint32_t    ackTimeout = NORERADIO_ACK_TIMEOUT_TIME_MS;
 static  uint8_t downlinkData[64];
 static  uint8_t downlinkLength = 0;
 
+static  NodeRadioConfig _config =
+{
+     .frequency = 920000000,
+     .power     = 14
+};
+
 /* Pin driver handle */
 extern PIN_Handle ledPinHandle;
 
@@ -138,7 +144,13 @@ static void resendPacket(void);
 static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status);
 
 /***** Function definitions *****/
-void NodeRadioTask_init(void) {
+void NodeRadioTask_init(NodeRadioConfig* config)
+{
+
+    if (config != NULL)
+    {
+        memcpy(&_config, config, sizeof(NodeRadioConfig));
+    }
 
     /* Create semaphore used for exclusive radio access */
     Semaphore_Params semParam;
@@ -203,6 +215,10 @@ static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
      * the below API
      * EasyLink_setFrequency(868000000);
      */
+
+    //EasyLink_setFrequency(_config.frequency);
+    //EasyLink_setRfPower(_config.power);
+
     /* Use the True Random Number Generator to generate sensor node address randomly */;
     Power_setDependency(PowerCC26XX_PERIPH_TRNG);
     TRNGEnable();
