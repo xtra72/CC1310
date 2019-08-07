@@ -18,6 +18,7 @@ struct DataQueueElement {
 void        DataQ_init(uint32_t size);
 uint32_t    DataQ_count(void);
 uint32_t    DataQ_maxCount(void);
+void        DataQ_clean(void);
 bool        DataQ_push(uint8_t* data, uint32_t length);
 bool        DataQ_pop(uint8_t* buffer, uint32_t maxLength, uint32_t* length);
 bool        DataQ_front(uint8_t* buffer, uint32_t maxLength, uint32_t* length);

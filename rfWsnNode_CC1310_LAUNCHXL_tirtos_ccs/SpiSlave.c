@@ -235,7 +235,19 @@ void *slaveThread(void *arg0)
 
                 case    RF_IO_RADIO_START:
                     {
-                        NodeTask_radioStart();
+                        Trace_printf("RF Radio Start!");
+                        if (rxBuffer.frame.len == 8 + sizeof(NODETASK_CONFIG))
+                        {
+                            if (NodeTask_setConfig((NODETASK_CONFIG *)&rxBuffer.frame.payload[8]))
+                            {
+                                NodeTask_radioStart();
+                                txBuffer.frame.cmd = RF_IO_RADIO_STARTED;
+                            }
+                        }
+                        else
+                        {
+                            Trace_printf("Invalid frame length : %d, %d", rxBuffer.frame.len, sizeof(NODETASK_CONFIG));
+                        }
                     }
                     break;
 
@@ -345,7 +357,6 @@ void *slaveThread(void *arg0)
 
                 txBuffer.frame.status = NodeTask_getStatus();
                 txBuffer.frame.qsize = DataQ_maxCount() - DataQ_count();
-
                 if (txBuffer.frame.len != 0)
                 {
                     txBuffer.frame.crc =   CRC16_calc(txBuffer.frame.payload, txBuffer.frame.len);

@@ -61,7 +61,6 @@ int main(void)
     /* Initialize sensor node tasks */
     Trace_init();
     NodeTask_init();
-    NodeRadioTask_init(NULL);
 
     SpiSlave_init();
 

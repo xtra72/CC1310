@@ -67,5 +67,7 @@ bool    MPU6050_readValue(uint8_t type, double* value);
 bool    MPU6050_start(void);
 bool    MPU6050_stop(void);
 float   MPU6050_getOscillationValue(void);
+bool    MPU6050_setIntMode(bool enable);
+bool    MPU6050_getIntMode(void);
 
 #endif /* MPU6050_H_ */

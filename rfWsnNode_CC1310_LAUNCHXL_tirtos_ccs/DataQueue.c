@@ -67,6 +67,21 @@ uint32_t    DataQ_count(void)
     return  count;
 }
 
+
+void    DataQ_clean(void)
+{
+    uint32_t    count = 0;
+
+    /* Get access semaphore */
+    Semaphore_pend(accessSemHandle, BIOS_WAIT_FOREVER);
+
+    headIndex = 0;
+    tailIndex = 0;
+
+    /* Return access semaphore */
+    Semaphore_post(accessSemHandle);
+}
+
 bool    DataQ_push(uint8_t* data, uint32_t length)
 {
     if (poolSize - 1 <= DataQ_count())

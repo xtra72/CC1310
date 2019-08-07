@@ -58,6 +58,7 @@ static  I2C_Handle      i2c_;
 static  uint8_t         txBuffer[MPU6050_BUFFER_LENGTH_MAX];
 static  uint8_t         rxBuffer[MPU6050_BUFFER_LENGTH_MAX];
 static  I2C_Transaction i2cTransaction;
+static  bool            intEnable = true;
 
 bool    MPU6050_write8(uint8_t address, uint8_t value);
 bool    MPU6050_write16(uint8_t address, uint16_t value);
@@ -398,12 +399,14 @@ bool    MPU6050_popValue(uint8_t type, double* value)
 /*
  * ======== MPU6050_thread ========
  */
-
 bool    MPU6050_start(void)
 {
     Trace_printf("Start Motion Detection");
     MPU6050_write8(MPU6050_FIFO_CTRL, MPU6050_FIFO_CTRL_ACCL);
-    MPU6050_write8(MPU6050_INT_ENABLE, MPU6050_INT_ENABLE_FIFO_OVERFLOW);
+    if (intEnable)
+    {
+        MPU6050_write8(MPU6050_INT_ENABLE, MPU6050_INT_ENABLE_FIFO_OVERFLOW);
+    }
     MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_RESET);
     CPUdelay(10000*12);
     MPU6050_write8(MPU6050_USER_CTRL, MPU6050_USER_CTRL_FIFO_EN);
@@ -417,7 +420,10 @@ bool    MPU6050_start(void)
     Power_shutdown(0, 0);
 
 #else
-    PIN_setInterrupt(interruptHandle, PIN_IRQ_POSEDGE);
+    if (intEnable)
+    {
+        PIN_setInterrupt(interruptHandle, PIN_IRQ_POSEDGE);
+    }
 #endif
 
     return  true;
@@ -427,9 +433,13 @@ bool    MPU6050_start(void)
 bool    MPU6050_stop(void)
 {
     Trace_printf("Stop Motion Detection");
-    PIN_setInterrupt(interruptHandle, PIN_IRQ_DIS);
+    if (intEnable)
+    {
+        PIN_setInterrupt(interruptHandle, PIN_IRQ_DIS);
 
-    MPU6050_write8(MPU6050_INT_ENABLE, 0);
+        MPU6050_write8(MPU6050_INT_ENABLE, 0);
+    }
+
     MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_ACCL_Z | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
     MPU6050_write8(MPU6050_PWR_MGMT_1,  MPU6050_PWR_MGMT_TEMP_DISABLE);
 
@@ -535,4 +545,16 @@ bool    MPU6050_init(void)
     MPU6050_write8(MPU6050_PWR_MGMT_2, MPU6050_PWR_MGMT_LP_WAKE_CTRL_3 | MPU6050_PWR_MGMT_STBY_ACCL_X | MPU6050_PWR_MGMT_STBY_ACCL_Y | MPU6050_PWR_MGMT_STBY_ACCL_Z | MPU6050_PWR_MGMT_STBY_GYLO_X | MPU6050_PWR_MGMT_STBY_GYLO_Y | MPU6050_PWR_MGMT_STBY_GYLO_Z);
 
     return   true;
+}
+
+bool    MPU6050_setIntMode(bool enable)
+{
+    intEnable = enable;
+
+    return  true;
+}
+
+bool    MPU6050_getIntMode()
+{
+    return  intEnable;
 }

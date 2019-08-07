@@ -12,6 +12,7 @@
 #define RF_IO_TX_DATA                   0x01
 #define RF_IO_PING                      0x03
 #define RF_IO_RADIO_START               0x04
+#define RF_IO_RADIO_STARTED             0x05
 
 #define RF_IO_REQ_GET_CONFIG            0x11
 #define RF_IO_REQ_SET_CONFIG            0x12

@@ -137,7 +137,7 @@ PIN_Config ledPinTable[] = {
 
 static  ConcentratorRadioConfig _config =
 {
-     .frequency = 920000000,
+     .frequency = 915000000,
      .power = 14
 };
 
@@ -188,7 +188,7 @@ static void concentratorRadioTask_main(UArg arg0, UArg arg1)
     // Change the modulation from the default found in easylink_config.h
 	easyLink_params.ui32ModType = DEFINED_RADIO_EASYLINK_MODULATION;
 #endif
-	
+
     /* Initialize EasyLink */
 	if(EasyLink_init(&easyLink_params) != EasyLink_Status_Success){ 
 		System_abort("EasyLink_init failed");

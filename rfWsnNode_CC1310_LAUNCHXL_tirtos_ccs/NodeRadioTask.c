@@ -93,6 +93,7 @@
 #define RADIO_EVENT_COMMAND_STOP_MOTION     (uint32_t)(1 << 13)
 #define RADIO_EVENT_COMMAND_SLEEP           (uint32_t)(1 << 14)
 #define RADIO_EVENT_DOWNLINK                (uint32_t)(1 << 15)
+#define RADIO_EVENT_START           (uint32_t)(1 << 16)
 
 #define NODERADIO_MAX_RETRIES 2
 #define NORERADIO_ACK_TIMEOUT_TIME_MS (160)
@@ -110,6 +111,7 @@ struct RadioOperation {
 /***** Variable declarations *****/
 static Task_Params nodeRadioTaskParams;
 Task_Struct nodeRadioTask;        /* not static so you can see in ROV */
+static bool   nodeRadioTaskInitialized = false;
 static uint8_t nodeRadioTaskStack[NODERADIO_TASK_STACK_SIZE];
 Semaphore_Struct radioAccessSem;  /* not static so you can see in ROV */
 static Semaphore_Handle radioAccessSemHandle;
@@ -128,7 +130,7 @@ static  uint8_t downlinkLength = 0;
 
 static  NodeRadioConfig _config =
 {
-     .frequency = 920000000,
+     .frequency = 915000000,
      .power     = 14
 };
 
@@ -216,8 +218,10 @@ static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
      * EasyLink_setFrequency(868000000);
      */
 
-    //EasyLink_setFrequency(_config.frequency);
-    //EasyLink_setRfPower(_config.power);
+    Trace_printf("Set Frequency : %d", _config.frequency);
+    EasyLink_setFrequency(_config.frequency);
+    Trace_printf("Set power : %d", _config.power);
+    EasyLink_setRfPower(_config.power);
 
     /* Use the True Random Number Generator to generate sensor node address randomly */;
     Power_setDependency(PowerCC26XX_PERIPH_TRNG);
@@ -240,11 +244,13 @@ static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
         System_abort("EasyLink_enableRxAddrFilter failed");
     }
 
+    nodeRadioTaskInitialized = true;
     /* Enter main task loop */
     while (1)
     {
         /* Wait for an event */
         uint32_t events = Event_pend(radioOperationEventHandle, 0, RADIO_EVENT_ALL, BIOS_WAIT_FOREVER);
+
 
         /* If we should send ADC data */
         if (events & RADIO_EVENT_SEND_RAW_DATA)
@@ -316,6 +322,17 @@ static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
 }
 
 
+/* Raise RADIO_EVENT_SEND_ADC_DATA event */
+void    NodeRadioTask_start(void)
+{
+    Event_post(radioOperationEventHandle, RADIO_EVENT_START);
+}
+
+bool    NodeRadioTask_isRunning(void)
+{
+    return  nodeRadioTaskInitialized;
+}
+
 enum NodeRadioOperationStatus NodeRadioTask_testReset()
 {
     enum NodeRadioOperationStatus status;
@@ -340,6 +357,11 @@ enum NodeRadioOperationStatus NodeRadioTask_testReset()
 
 enum NodeRadioOperationStatus NodeRadioTask_sendRawData(uint8_t *data, uint16_t length)
 {
+    if (!nodeRadioTaskInitialized)
+    {
+        return  NodeRadioStatus_FailedNotConnected;
+    }
+
     enum NodeRadioOperationStatus status;
 
     /* Get radio access semaphore */

@@ -50,6 +50,9 @@ enum NodeRadioOperationStatus {
 /* Initializes the NodeRadioTask and creates all TI-RTOS objects */
 void NodeRadioTask_init(NodeRadioConfig* config);
 
+void NodeRadioTask_start(void);
+bool NodeRadioTask_isRunning(void);
+
 enum NodeRadioOperationStatus NodeRadioTask_sendRawData(uint8_t *data, uint16_t length);
 enum NodeRadioOperationStatus NodeRadioTask_testReset(void);
 

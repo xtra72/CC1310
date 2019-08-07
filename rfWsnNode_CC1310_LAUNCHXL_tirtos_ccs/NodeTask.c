@@ -125,6 +125,10 @@ static Clock_Handle messageTimeoutClockHandle;
 Clock_Struct postMotionDetectedClock;     /* not static so you can see in ROV */
 static Clock_Handle postMotionDetectedClockHandle;
 
+/* Clock for the motion detection timeout */
+Clock_Struct motionDetectionClock;     /* not static so you can see in ROV */
+static Clock_Handle motionDetectionClockHandle;
+
 
 struct  TestConfig
 {
@@ -178,6 +182,12 @@ static  uint32_t    directTransferDataLength = 0;
 static  uint8_t     downlinkData[128];
 static  uint8_t     downlinkLength = 0;
 
+static  NodeRadioConfig radio_config_ =
+{
+     .frequency = 915000000,
+     .power = 14
+};
+
 #define msToClock(ms) ((ms) * 1000 / Clock_tickPeriod)
 
 /***** Prototypes *****/
@@ -185,13 +195,14 @@ static void nodeTaskFunction(UArg arg0, UArg arg1);
 static void transferTimeoutCallback(UArg arg0);
 static void messageTimeoutCallback(UArg arg0);
 static void postMotionDetectedCallback(UArg arg0);
+static void motionDetectionRunCallback(UArg arg0);
 
 static void NodeTask_eventTestTransferStart(void);
 static void NodeTask_eventTestTransferStop(void);
 static void NodeTask_eventTestReset(void);
 
 static void NodeTask_motionDetectionRun(void);
-static void NodeTask_motionDetectionFinished(void);
+static bool NodeTask_motionDetectionFinished(void);
 
 static void NodeTask_eventDataTransfer(void);
 static void NodeTask_eventPostTransfer(void);
@@ -234,6 +245,9 @@ void NodeTask_init(void)
     Clock_construct(&postMotionDetectedClock, postMotionDetectedCallback, 0, &clkParams);
     postMotionDetectedClockHandle = Clock_handle(&postMotionDetectedClock);
 
+    Clock_construct(&motionDetectionClock, motionDetectionRunCallback, 0, &clkParams);
+    motionDetectionClockHandle = Clock_handle(&motionDetectionClock);
+
     /* Create the node task */
     Task_Params_init(&nodeTaskParams);
     nodeTaskParams.stackSize = NODE_TASK_STACK_SIZE;
@@ -255,7 +269,9 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         /* If new ADC value, send this data */
         if (events & NODE_EVENT_RADIO_START)
         {
-//         NodeRadioTask_init(NULL);
+            //NodeRadioTask_start();
+            NodeRadioTask_init(&radio_config_);
+            DataQ_clean();
         }
 
         if (events & NODE_EVENT_TEST_TRANSFER_START)
@@ -304,8 +320,15 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         {
             Trace_printf("Motion detection start.");
             motionDetectionCountTry_ = 0;
-            NodeTask_motionDetectionRun();
             status_ &= ~NODE_STATUS_FLAG_MOTION_DETECTED;
+
+            NodeTask_motionDetectionRun();
+            if (!MPU6050_getIntMode())
+            {
+                Clock_setPeriod(motionDetectionClockHandle, msToClock(1000));
+                Clock_start(motionDetectionClockHandle);
+            }
+
         }
         if( events & NODE_EVENT_MOTION_DETECTION_RUN)
         {
@@ -317,6 +340,10 @@ static void nodeTaskFunction(UArg arg0, UArg arg1)
         }
         else if( events & NODE_EVENT_MOTION_DETECTION_STOP)
         {
+            if (!MPU6050_getIntMode())
+            {
+                Clock_stop(motionDetectionClockHandle);
+            }
             MPU6050_stop();
             Clock_stop(postMotionDetectedClockHandle);
             status_ &= ~NODE_STATUS_FLAG_MOTION_DETECTED;
@@ -413,6 +440,16 @@ void postMotionDetectedCallback(UArg arg0)
     {
         Clock_stop(postMotionDetectedClockHandle);
         Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_START);
+    }
+}
+
+void motionDetectionRunCallback(UArg arg0)
+{
+    if (NodeTask_motionDetectionFinished())
+    {
+        ++motionDetectionCountTry_;
+        MPU6050_start();
+        Trace_printf("motion detection Run[%d]", motionDetectionCountTry_);
     }
 }
 
@@ -596,7 +633,7 @@ void    NodeTask_motionDetectionRun(void)
     Trace_printf("motion detection Run[%d]", motionDetectionCountTry_);
 }
 
-void    NodeTask_motionDetectionFinished(void)
+bool    NodeTask_motionDetectionFinished(void)
 {
     float   value;
 
@@ -606,6 +643,7 @@ void    NodeTask_motionDetectionFinished(void)
     if (value >= motionDetectionLimit_)
     {
         Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTED);
+        return  true;
     }
     else
     {
@@ -614,6 +652,8 @@ void    NodeTask_motionDetectionFinished(void)
             Event_post(nodeEventHandle, NODE_EVENT_MOTION_DETECTION_RUN);
         }
     }
+
+    return false;
 }
 
 void    NodeTask_notifyMotionDetectionFinished(void)
@@ -623,6 +663,7 @@ void    NodeTask_notifyMotionDetectionFinished(void)
 
 void    NodeTask_radioStart(void)
 {
+    Trace_printf("Radion Start");
     Event_post(nodeEventHandle, NODE_EVENT_RADIO_START);
 }
 
@@ -666,13 +707,16 @@ void    NodeTask_downlink(uint8_t* data, uint8_t length)
 
 void    NodeTask_eventDataTransfer(void)
 {
-    if (NodeRadioTask_sendRawData(directTransferData, directTransferDataLength) == NodeRadioStatus_Success)
+    if (NodeRadioTask_isRunning)
     {
-        NodeTask_dataTransferSuccess();
-    }
-    else
-    {
-        NodeTask_dataTransferFailed();
+        if (NodeRadioTask_sendRawData(directTransferData, directTransferDataLength) == NodeRadioStatus_Success)
+        {
+            NodeTask_dataTransferSuccess();
+        }
+        else
+        {
+            NodeTask_dataTransferFailed();
+        }
     }
 }
 
@@ -754,7 +798,8 @@ void    NodeTask_getConfig(NODETASK_CONFIG* config)
 
 bool    NodeTask_setConfig(NODETASK_CONFIG* config)
 {
-    EasyLink_setFrequency(config->frequency);
+    radio_config_.frequency = config->frequency;
+    radio_config_.power = config->power;
 
     return  true;
 }
