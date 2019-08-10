@@ -58,10 +58,14 @@
 
 /* TI-RTOS Header files */
 #include <ti/drivers/PIN.h>
+#include <ti/drivers/Watchdog.h>
 #include <ti/display/Display.h>
 #include <ti/display/DisplayExt.h>
 
 #include <ti/devices/DeviceFamily.h>
+#include <ti/devices/cc13x0/inc/hw_memmap.h>
+#include <ti/devices/cc13x0/inc/hw_aon_sysctl.h>
+#include <ti/devices/cc13x0/inc/hw_prcm.h>
 #include DeviceFamily_constructPath(driverlib/cpu.h)
 
 #include <strings.h>
@@ -109,6 +113,12 @@ struct RawDataNode {
     int8_t      latestRssi;
 };
 
+static ConcentratorRadioConfig radioConfig_ =
+{
+ .address = 0,
+ .frequency = 915000000,
+ .power = 14
+};
 
 /***** Variable declarations *****/
 static Task_Params concentratorTaskParams;
@@ -356,7 +366,7 @@ bool    ConcentratorTask_commandConfig(int argc, char *argv[])
         int8_t  power;
 
         EasyLink_getRfPower(&power);
-        ShellTask_output("+%s:OK,FREQ=%d,POW=%d", argv[0],  EasyLink_getFrequency(), power);
+        ShellTask_output("+%s:OK,FREQ=%d,POW=%d,LOG=%s\n", argv[0],  EasyLink_getFrequency(), power, (Trace_isEnable()?"ON":"OFF"));
     }
     else
     {
@@ -364,7 +374,24 @@ bool    ConcentratorTask_commandConfig(int argc, char *argv[])
         for(i = 1 ; i < argc ; i++)
         {
             char* name = strtok(argv[i], "=");
-            if (strcasecmp(name, "FREQ") == 0)
+            if (strcasecmp(name, "ADDR") == 0)
+            {
+                char* value = strtok(NULL, " ");
+                if (value != 0)
+                {
+                    uint32_t    addr = strtoul(value, NULL, 10);
+                    if (addr <= 254)
+                    {
+                        radioConfig_.address = addr;
+                    }
+                    else
+                    {
+                        ShellTask_output("+%s:ERR, Invalid address[%s]\n", argv[0], value);
+                        return  false;
+                    }
+                }
+            }
+            else if (strcasecmp(name, "FREQ") == 0)
             {
                 char* value = strtok(NULL, " ");
                 if (value != 0)
@@ -372,18 +399,12 @@ bool    ConcentratorTask_commandConfig(int argc, char *argv[])
                     uint32_t    frequency = strtoul(value, NULL, 10);
                     if ((RADIO_FREQUENCY_MIN <= frequency) && (frequency <= RADIO_FREQUENCY_MAX))
                     {
-                        if (EasyLink_setFrequency(frequency) == EasyLink_Status_Success)
-                        {
-                            ShellTask_output("+%s:OK", argv[0]);
-                        }
-                        else
-                        {
-                            ShellTask_output("+%s:ERR", argv[0]);
-                        }
+                        radioConfig_.frequency = frequency;
                     }
                     else
                     {
-                        ShellTask_output("+%s:ERR", argv[0]);
+                        ShellTask_output("+%s:ERR,Invalid Frequency[%s]\n", argv[0], value);
+                        return  false;
                     }
                 }
             }
@@ -395,30 +416,92 @@ bool    ConcentratorTask_commandConfig(int argc, char *argv[])
                     int32_t    power = strtol(value, NULL, 10);
                     if ((RADIO_POWER_MIN <= power) && (power <= RADIO_POWER_MAX))
                     {
-                        if (EasyLink_setRfPower(power) == EasyLink_Status_Success)
-                        {
-                            ShellTask_output("+%s:OK", argv[0]);
-                        }
-                        else
-                        {
-                            ShellTask_output("+%s:ERR", argv[0]);
-                        }
+                        radioConfig_.power = power;
                     }
                     else
                     {
-                        ShellTask_output("+%s:ERR", argv[0]);
+                        ShellTask_output("+%s:ERR,Invalid Power[%s]\n", argv[0], value);
+                        return  false;
+                    }
+                }
+            }
+            else if (strcasecmp(name, "LOG") == 0)
+            {
+                char* value = strtok(NULL, " ");
+                if (value != 0)
+                {
+                    if (strcasecmp(value, "ON") == 0)
+                    {
+                        Trace_enable();
+                    }
+                    else if (strcasecmp(value, "OFF") == 0)
+                    {
+                        Trace_disable();
+                    }
+                    else
+                    {
+                        ShellTask_output("+%s:ERR,Invalid Parameter[%s]\n", argv[0], value);
+                        return  false;
                     }
                 }
             }
             else
             {
-                ShellTask_output("+%s:ERR", argv[0]);
-                break;
+                ShellTask_output("+%s:ERR,Invalid Parameter[%s]", argv[0], name);
+                return  false;
             }
         }
-
+        ConcentratorRadioTask_setConfig(&radioConfig_);
     }
 
+
+    ShellTask_output("+%s:OK\n", argv[0]);
+
+    return true;
+}
+
+
+/*
+ *  ======== watchdogCallback ========
+ */
+void watchdogCallback(uintptr_t watchdogHandle)
+{
+    /*
+     * If the Watchdog Non-Maskable Interrupt (NMI) is called,
+     * loop until the device resets. Some devices will invoke
+     * this callback upon watchdog expiration while others will
+     * reset. See the device specific watchdog driver documentation
+     * for your device.
+     */
+    while (1) {}
+}
+bool    ConcentratorTask_commandReset(int argc, char *argv[])
+{
+    Watchdog_init();
+    Watchdog_Params params;
+    Watchdog_Params_init(&params);
+    params.callbackFxn = watchdogCallback;
+    params.debugStallMode = Watchdog_DEBUG_STALL_ON;
+    params.resetMode = Watchdog_RESET_ON;
+
+    Watchdog_Handle handle = Watchdog_open(Board_WATCHDOG0, &params);
+    Watchdog_setReload(handle, 100);
+
+
+    while ( 1 ) {
+       // Do nothing, just wait for the reset (and never return from here)
+    }
+
+#if 0
+    // Disable CPU interrupts
+    CPUcpsid();
+    // Write reset register
+    HWREGBITW( AON_SYSCTL_BASE + AON_SYSCTL_O_RESETCTL, AON_SYSCTL_RESETCTL_SYSRESET_BITN ) = 1;
+    // Finally, wait until the above write propagates
+    while ( 1 ) {
+       // Do nothing, just wait for the reset (and never return from here)
+    }
+#endif
     return true;
 }
 
@@ -426,11 +509,11 @@ bool    ConcentratorTask_commandStatus(int argc, char *argv[])
 {
     if (argc == 1)
     {
-        ShellTask_output("+%s:OK", argv[0]);
+        ShellTask_output("+%s:OK\n", argv[0]);
     }
     else
     {
-        ShellTask_output("+%s:RSSI=%d", argv[0], ConcentratorRadioTask_getRssi());
+        ShellTask_output("+%s:RSSI=%d\n", argv[0], ConcentratorRadioTask_getRssi());
     }
 
     return true;
@@ -439,7 +522,105 @@ bool    ConcentratorTask_commandStatus(int argc, char *argv[])
 
 bool    ConcentratorTask_commandStart(int argc, char *argv[])
 {
-    ConcentratorRadioTask_init(NULL);
+    ConcentratorRadioConfig config;
+
+    memcpy(&config, &radioConfig_, sizeof(ConcentratorRadioConfig));
+
+    if (argc > 1)
+    {
+        int i;
+
+        for(i = 1 ; i < argc ; i++)
+        {
+            char* name = strtok(argv[i], "=");
+            if (name != NULL)
+            {
+                if (strcasecmp(name, "ADDR") == 0)
+                {
+                    char* value = strtok(NULL, " ");
+                    if (value != 0)
+                    {
+                        uint32_t    addr = strtoul(value, NULL, 10);
+                        if (addr <= 254)
+                        {
+                            config.address = addr;
+                        }
+                        else
+                        {
+                            ShellTask_output("+%s:ERR,Invalid Address[%s]\n", argv[0], value);
+                            return  false;
+                        }
+                    }
+                }
+                else if (strcasecmp(name, "FREQ") == 0)
+                {
+                    char* value = strtok(NULL, " ");
+                    if (value != 0)
+                    {
+                        uint32_t    frequency = strtoul(value, NULL, 10);
+                        if ((RADIO_FREQUENCY_MIN <= frequency) && (frequency <= RADIO_FREQUENCY_MAX))
+                        {
+                            config.frequency = frequency;
+                        }
+                        else
+                        {
+                            ShellTask_output("+%s:ERR,Invalid Frequency[%s]\n", argv[0],value);
+                            return  false;
+                        }
+                    }
+                }
+                else if (strcasecmp(name, "POW") == 0)
+                {
+                    char* value = strtok(NULL, " ");
+                    if (value != 0)
+                    {
+                        int32_t    power = strtol(value, NULL, 10);
+                        if ((RADIO_POWER_MIN <= power) && (power <= RADIO_POWER_MAX))
+                        {
+                            config.power = power;
+                        }
+                        else
+                        {
+                            ShellTask_output("+%s:ERR,Invalid Power[%s]\n", argv[0], value);
+                            return  false;
+                        }
+                    }
+                }
+                else
+                {
+                    ShellTask_output("+%s:ERR,Invalid Param[%s]\n", argv[0], name);
+                    return  false;
+                }
+            }
+        }
+
+    }
+
+    if (!ConcentratorRadioTask_isRunning())
+    {
+        if (ConcentratorRadioTask_init(&config))
+        {
+            memcpy(&radioConfig_, &config, sizeof(ConcentratorRadioConfig));
+            ShellTask_output("+%s:OK\n", argv[0]);
+        }
+        else
+        {
+            ShellTask_output("+%s:ERR\n", argv[0]);
+        }
+    }
+    else
+    {
+        if ((memcmp(&radioConfig_, &config, sizeof(ConcentratorRadioConfig)) == 0) || (ConcentratorRadioTask_setConfig(&config)))
+        {
+            memcpy(&radioConfig_, &config, sizeof(ConcentratorRadioConfig));
+            ShellTask_output("+%s:OK\n", argv[0]);
+        }
+        else
+        {
+            ShellTask_output("+%s:ERR\n", argv[0]);
+        }
+    }
+
 
     return  true;
 }
@@ -449,7 +630,7 @@ bool    ConcentratorTask_commandDownlink(int argc, char *argv[])
 {
     if (argc != 3)
     {
-        ShellTask_output("+%s:ERR", argv[0]);
+        ShellTask_output("+%s:ERR\n", argv[0]);
         return  false;
     }
 
@@ -496,7 +677,7 @@ bool    ConcentratorTask_commandDownlink(int argc, char *argv[])
 
    if (!ConcentratorTask_sendCommand(device_id, RF_DOWNLINK, (uint8_t *)buffer, length))
     {
-        ShellTask_output("+%s:ERR", argv[0]);
+        ShellTask_output("+%s:ERR\n", argv[0]);
         return  false;
     }
 
@@ -507,7 +688,7 @@ bool    ConcentratorTask_commandContract(int argc, char *argv[])
 {
     if (argc != 3)
     {
-        ShellTask_output("+%s:ERR", argv[0]);
+        ShellTask_output("+%s:ERR\n", argv[0]);
         return  false;
     }
 
@@ -525,7 +706,7 @@ bool    ConcentratorTask_commandContract(int argc, char *argv[])
     params[3] = (ts      ) & 0xFF;
    if (!ConcentratorTask_sendCommand(device_id, RF_REP_CONTRACT, params, sizeof(params)))
     {
-        ShellTask_output("+%s:ERR", argv[0]);
+        ShellTask_output("+%s:ERR\n", argv[0]);
         return  false;
     }
 
@@ -536,7 +717,7 @@ bool    ConcentratorTask_commandScan(int argc, char *argv[])
 {
     if (argc != 3)
     {
-        ShellTask_output("+%s:ERR", argv[0]);
+        ShellTask_output("+%s:ERR\n", argv[0]);
         return  false;
     }
 
@@ -550,7 +731,7 @@ bool    ConcentratorTask_commandScan(int argc, char *argv[])
     {
         if (!ConcentratorTask_sendCommand(device_id, RF_REQ_SRV_SCAN_START, NULL, 0))
         {
-            ShellTask_output("+%s:ERR", argv[0]);
+            ShellTask_output("+%s:ERR\n", argv[0]);
             return  false;
         }
     }
@@ -558,7 +739,7 @@ bool    ConcentratorTask_commandScan(int argc, char *argv[])
     {
         if (!ConcentratorTask_sendCommand(device_id, RF_REQ_SRV_SCAN_STOP, NULL, 0))
         {
-            ShellTask_output("+%s:ERR", argv[0]);
+            ShellTask_output("+%s:ERR\n", argv[0]);
             return  false;
         }
     }
@@ -571,7 +752,7 @@ bool    ConcentratorTask_commandSleep(int argc, char *argv[])
 {
     if (argc != 3)
     {
-        ShellTask_output("+%s:ERR", argv[0]);
+        ShellTask_output("+%s:ERR\n", argv[0]);
         return  false;
     }
 
@@ -590,11 +771,11 @@ bool    ConcentratorTask_commandSleep(int argc, char *argv[])
 
     if (!ConcentratorTask_sendCommand(device_id, RF_REQ_SRV_SLEEP, params, 4))
     {
-        ShellTask_output("+%s:ERR", argv[0]);
+        ShellTask_output("+%s:ERR\n", argv[0]);
         return  false;
     }
 
-    ShellTask_output("+%s:OK", argv[0]);
+    ShellTask_output("+%s:OK\n", argv[0]);
     return  true;
 }
 
@@ -603,7 +784,7 @@ bool    ConcentratorTask_commandDetect(int argc, char *argv[])
 {
     if (argc != 3)
     {
-        ShellTask_output("+%s:ERR", argv[0]);
+        ShellTask_output("+%s:ERR\n", argv[0]);
         return  false;
     }
 
@@ -617,7 +798,7 @@ bool    ConcentratorTask_commandDetect(int argc, char *argv[])
     {
         if (!ConcentratorTask_sendCommand(device_id, RF_REQ_SRV_MOTION_DETECTION_START, NULL, 0))
         {
-            ShellTask_output("+%s:ERR", argv[0]);
+            ShellTask_output("+%s:ERR\n", argv[0]);
             return  false;
         }
     }
@@ -625,11 +806,12 @@ bool    ConcentratorTask_commandDetect(int argc, char *argv[])
     {
         if (!ConcentratorTask_sendCommand(device_id, RF_REQ_SRV_MOTION_DETECTION_STOP, NULL, 0))
         {
-            ShellTask_output("+%s:ERR", argv[0]);
+            ShellTask_output("+%s:ERR\n", argv[0]);
             return  false;
         }
     }
 
-    ShellTask_output("+%s:OK", argv[0]);
+    ShellTask_output("+%s:OK\n", argv[0]);
     return  true;
 }
+

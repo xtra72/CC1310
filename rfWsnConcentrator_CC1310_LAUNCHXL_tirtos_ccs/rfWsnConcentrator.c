@@ -77,13 +77,14 @@
 const ShellTaskCommand    commandList_[] =
 {
     {   .name = "cfg", .command = ConcentratorTask_commandConfig    },
-    {   .name = "stat", .command = ConcentratorTask_commandStatus   },
-//    {   .name = "start", .command = ConcentratorTask_commandStart   },
     {   .name = "cont", .command = ConcentratorTask_commandContract },
+    {   .name = "detect", .command = ConcentratorTask_commandDetect },
     {   .name = "dl", .command = ConcentratorTask_commandDownlink   },
+    {   .name = "reset", .command = ConcentratorTask_commandReset   },
     {   .name = "scan", .command = ConcentratorTask_commandScan     },
     {   .name = "sleep", .command = ConcentratorTask_commandSleep   },
-    {   .name = "detect", .command = ConcentratorTask_commandDetect }
+    {   .name = "stat", .command = ConcentratorTask_commandStatus   },
+    {   .name = "start", .command = ConcentratorTask_commandStart   }
 };
 
 int main(void)
@@ -98,7 +99,6 @@ int main(void)
 
     /* Initialize concentrator tasks */
     ConcentratorTask_init();
-    ConcentratorRadioTask_init(NULL);
 
     ShellTask_init(commandList_, sizeof(commandList_) / sizeof(ShellTaskCommand));
 

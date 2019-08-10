@@ -9,6 +9,9 @@
 #define TRACE_H_
 
 
+void  Trace_enable(void);
+void  Trace_disable(void);
+bool  Trace_isEnable(void);
 void  Trace_printf(char *fmt, ...);
 
 #endif /* TRACE_H_ */

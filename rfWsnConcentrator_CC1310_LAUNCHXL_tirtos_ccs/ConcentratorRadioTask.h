@@ -52,6 +52,7 @@
 
 typedef struct
 {
+    uint8_t     address;
     uint32_t    frequency;
     uint32_t    power;
 } ConcentratorRadioConfig;
@@ -71,10 +72,14 @@ union ConcentratorPacket {
 typedef void (*ConcentratorRadio_PacketReceivedCallback)(union ConcentratorPacket* packet, int8_t rssi);
 
 /* Create the ConcentratorRadioTask and creates all TI-RTOS objects */
-void ConcentratorRadioTask_init(ConcentratorRadioConfig* config);
+bool ConcentratorRadioTask_init(ConcentratorRadioConfig* config);
+
+bool ConcentratorRadioTask_isRunning(void);
 
 /* Register the packet received callback */
 void ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorRadio_PacketReceivedCallback callback);
+
+bool    ConcentratorRadioTask_setConfig(ConcentratorRadioConfig* config);
 
 
 uint8_t ConcentratorRadioTask_getAddress(void);

@@ -36,7 +36,7 @@
 #include "stdint.h"
 #include "easylink/EasyLink.h"
 
-#define RADIO_FREQUENCY_MIN             920000000
+#define RADIO_FREQUENCY_MIN             902000000
 #define RADIO_FREQUENCY_MAX             924000000
 #define RADIO_POWER_MIN                 0
 #define RADIO_POWER_MAX                 18

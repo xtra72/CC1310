@@ -273,22 +273,26 @@ bool    ShellTask_write(char *_string, uint32_t _length, uint32_t _timeout)
     return  true;
 }
 
-/*
- * By default disable both asserts and log for this module.
- * This must be done before DebugP.h is included.
- */
-#ifndef DebugP_ASSERT_ENABLED
-#define DebugP_ASSERT_ENABLED 0
-#endif
-#ifndef DebugP_LOG_ENABLED
-#define DebugP_LOG_ENABLED 0
-#endif
+static  bool    trace_ = false;
 
-#include <ti/drivers/dpl/DebugP.h>
+void  Trace_enable(void)
+{
+    trace_ = true;
+}
+
+void  Trace_disable(void)
+{
+    trace_ = false;
+}
+
+bool  Trace_isEnable(void)
+{
+    return  trace_;
+}
 
 void  Trace_printf(char *fmt, ...)
 {
-    if (NULL != uart)
+    if (trace_ && (NULL != uart))
     {
         Semaphore_pend(writeSemHandle_, BIOS_WAIT_FOREVER);
 

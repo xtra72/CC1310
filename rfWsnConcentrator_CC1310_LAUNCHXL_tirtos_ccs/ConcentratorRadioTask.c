@@ -71,7 +71,7 @@
 #include "RadioProtocol.h"
 #include "DataQueue.h"
 #include "crc16.h"
-
+#include "trace.h"
 /***** Defines *****/
 #define CONCENTRATORRADIO_TASK_STACK_SIZE 1024
 #define CONCENTRATORRADIO_TASK_PRIORITY   3
@@ -79,7 +79,8 @@
 #define RADIO_EVENT_ALL                  0xFFFFFFFF
 #define RADIO_EVENT_VALID_PACKET_RECEIVED      (uint32_t)(1 << 0)
 #define RADIO_EVENT_INVALID_PACKET_RECEIVED (uint32_t)(1 << 1)
-#define RADIO_EVENT_SEND_PACKET_READY       (uint32_t)(2 << 0)
+#define RADIO_EVENT_SEND_PACKET_READY       (uint32_t)(1 << 2)
+#define RADIO_EVENT_CONFIG                  (uint32_t)(1 << 3)
 
 #define CONCENTRATORRADIO_MAX_RETRIES 2
 
@@ -105,7 +106,6 @@ static ConcentratorRadio_PacketReceivedCallback packetReceivedCallback;
 static union ConcentratorPacket latestRxPacket;
 static EasyLink_TxPacket txPacket;
 static struct AckPacket ackPacket;
-static uint8_t concentratorAddress;
 static int8_t latestRssi;
 
 
@@ -124,35 +124,21 @@ static  uint8_t device_id = 0;
 static  uint8_t device_cmd = 0;
 static  uint8_t   device_params[32];
 static  uint32_t  device_length = 0;
+static  bool        run_ = false;
 
-/* Pin driver handle */
-static PIN_Handle ledPinHandle;
-static PIN_State ledPinState;
-
-/* Configure LED Pin */
-PIN_Config ledPinTable[] = {
-        CONCENTRATOR_ACTIVITY_LED | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
-    PIN_TERMINATE
-};
-
-static  ConcentratorRadioConfig _config =
+static  ConcentratorRadioConfig config_ =
 {
+     .address = RADIO_CONCENTRATOR_ADDRESS,
      .frequency = 915000000,
      .power = 14
 };
 
 /***** Function definitions *****/
-void ConcentratorRadioTask_init(ConcentratorRadioConfig* config) {
+bool ConcentratorRadioTask_init(ConcentratorRadioConfig* config) {
 
     if (config != NULL)
     {
-        memcpy(&_config, config, sizeof(ConcentratorRadioConfig));
-    }
-    /* Open LED pins */
-    ledPinHandle = PIN_open(&ledPinState, ledPinTable);
-	if (!ledPinHandle)
-	{
-        System_abort("Error initializing board 3.3V domain pins\n");
+        memcpy(&config_, config, sizeof(ConcentratorRadioConfig));
     }
 
     /* Create event used internally for state changes */
@@ -172,10 +158,33 @@ void ConcentratorRadioTask_init(ConcentratorRadioConfig* config) {
     concentratorRadioTaskParams.priority = CONCENTRATORRADIO_TASK_PRIORITY;
     concentratorRadioTaskParams.stack = &concentratorRadioTaskStack;
     Task_construct(&concentratorRadioTask, concentratorRadioTask_main, &concentratorRadioTaskParams, NULL);
+
+    return  true;
+}
+
+bool ConcentratorRadioTask_isRunning(void)
+{
+    return  run_;
 }
 
 void ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorRadio_PacketReceivedCallback callback) {
     packetReceivedCallback = callback;
+}
+
+bool    ConcentratorRadioTask_setConfig(ConcentratorRadioConfig* config)
+{
+    memcpy(&config_, config, sizeof(ConcentratorRadioConfig));
+
+    Event_post(radioOperationEventHandle, RADIO_EVENT_CONFIG);
+
+    return  true;
+}
+
+bool    ConcentratorRadioTask_getConfig(ConcentratorRadioConfig* config)
+{
+    memcpy(config, &config_, sizeof(ConcentratorRadioConfig));
+
+    return  true;
 }
 
 static void concentratorRadioTask_main(UArg arg0, UArg arg1)
@@ -191,7 +200,7 @@ static void concentratorRadioTask_main(UArg arg0, UArg arg1)
 
     /* Initialize EasyLink */
 	if(EasyLink_init(&easyLink_params) != EasyLink_Status_Success){ 
-		System_abort("EasyLink_init failed");
+		Trace_printf("EasyLink_init failed");
 	}	
 
     /* If you wich to use a frequency other than the default use
@@ -199,20 +208,25 @@ static void concentratorRadioTask_main(UArg arg0, UArg arg1)
      * EasyLink_setFrequency(868000000);
      */
 
+	EasyLink_setFrequency(config_.frequency);
+	EasyLink_setRfPower(config_.power);
+
     /* Set concentrator address */;
-    concentratorAddress = RADIO_CONCENTRATOR_ADDRESS;
-    EasyLink_enableRxAddrFilter(&concentratorAddress, 1, 1);
+    EasyLink_enableRxAddrFilter(&config_.address, 1, 1);
 
     /* Set up Ack packet */
-    ackPacket.header.sourceAddress = concentratorAddress;
+    ackPacket.header.sourceAddress = config_.address;
     ackPacket.header.packetType = RADIO_PACKET_TYPE_ACK_PACKET;
 
     /* Enter receive */
     if(EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0) != EasyLink_Status_Success) {
-        System_abort("EasyLink_receiveAsync failed");
+        Trace_printf("EasyLink_receiveAsync failed");
     }
 
+    run_ = true;
+
     while (1) {
+        EasyLink_Status status;
         uint32_t events = Event_pend(radioOperationEventHandle, 0, RADIO_EVENT_ALL, BIOS_WAIT_FOREVER);
 
         /* If valid packet received */
@@ -225,20 +239,18 @@ static void concentratorRadioTask_main(UArg arg0, UArg arg1)
             ConcentratorRadioTask_notifyPacketReceived(&latestRxPacket);
 
             /* Go back to RX */
-            if(EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0) != EasyLink_Status_Success) {
-                System_abort("EasyLink_receiveAsync failed");
+            status = EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0);
+            if( status != EasyLink_Status_Success) {
+                Trace_printf("EasyLink_receiveAsync failed [%d]", status);
             }
-
-
-            /* toggle Activity LED */
-            PIN_setOutputValue(ledPinHandle, CONCENTRATOR_ACTIVITY_LED, !PIN_getOutputValue(CONCENTRATOR_ACTIVITY_LED));
         }
 
         /* If invalid packet received */
         if(events & RADIO_EVENT_INVALID_PACKET_RECEIVED) {
             /* Go back to RX */
-            if(EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0) != EasyLink_Status_Success) {
-                System_abort("EasyLink_receiveAsync failed");
+            status = EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0) ;
+            if(status != EasyLink_Status_Success) {
+                Trace_printf("EasyLink_receiveAsync failed [%d]", status);
             }
         }
 
@@ -246,6 +258,21 @@ static void concentratorRadioTask_main(UArg arg0, UArg arg1)
         {
          //   ConsentratorRadioTask_send(uint8_t _destAddr, uint8_t _srcAddr, uint8_t* _payload, uint32_t _len, BIOS_WAIT_FOREVER)
         }
+
+        if (events & RADIO_EVENT_CONFIG)
+        {
+            EasyLink_abort();
+            EasyLink_setFrequency(config_.frequency);
+            EasyLink_setRfPower(config_.power);
+            EasyLink_enableRxAddrFilter(&config_.address, 1, 1);
+
+            /* Go back to RX */
+            status = EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0) ;
+            if(status != EasyLink_Status_Success) {
+                Trace_printf("EasyLink_receiveAsync failed [%d]", status);
+            }
+        }
+
     }
 }
 
@@ -287,6 +314,11 @@ static bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t 
 {
 	uint32_t absTime;
 
+	if (!run_)
+	{
+	    return  false;
+	}
+
     /* Set destinationAdress, but use EasyLink layers destination adress capability */
     txPacket.dstAddr[0] = latestSourceAddress;
 
@@ -327,6 +359,11 @@ static bool ConsentratorRadioTask_sendAck(uint8_t latestSourceAddress, uint32_t 
 static bool ConsentratorRadioTask_sendPacket(EasyLink_TxPacket* _packetAddress, uint32_t _timeout)
 {
     bool    ret = false;
+
+    if (!run_)
+    {
+        return  false;
+    }
 
     if (Semaphore_pend(sendSemHandle, _timeout))
     {
@@ -446,7 +483,7 @@ bool    ConcentratorRadioTask_postCommand(uint8_t _device_id, uint8_t _cmd, uint
 
 uint8_t  ConcentratorRadioTask_getAddress(void)
 {
-    return  concentratorAddress;
+    return  config_.address;
 }
 
 int8_t  ConcentratorRadioTask_getRssi(void)
