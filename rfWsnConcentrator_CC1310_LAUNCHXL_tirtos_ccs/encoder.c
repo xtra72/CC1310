@@ -61,7 +61,7 @@ void timerCallback(GPTimerCC26XX_Handle handle, GPTimerCC26XX_IntMask interruptM
 {
     static  int loop = 0;
 
-    if (loop++ >= 10)
+    if (++loop >= 10)
     {
         if (encoder_.index >= 10)
         {
