@@ -187,34 +187,54 @@ static void ConcentratorTask_main(UArg arg0, UArg arg1)
     /* Register a packet received callback with the radio task */
     ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorTask_packetReceivedCallback);
 
-    uint32_t    previous_time = (Clock_getTicks() * Clock_tickPeriod) / 1000;
+    uint32_t    previous_time = Clock_getTicks() / (1000 / Clock_tickPeriod);
 
     /* Enter main task loop */
     while(1)
     {
         uint32_t    wait_time;
         /* Wait for event */
-        uint32_t    current_time = (Clock_getTicks() * Clock_tickPeriod) / 1000;
+        uint32_t    current_time = Clock_getTicks() / (1000 / Clock_tickPeriod);
 
-        if ((previous_time / 1000) != (current_time / 1000))
+        if ((previous_time / 100) != (current_time / 100))
         {
 
             if (encoderEnabled)
             {
-                ShellTask_output("+ENC:NOTI,%d\n", Encoder_getCount());
+                static  ENCODER_RECORD  record;
+
+                if (Encoder_getRecord(&record, true))
+                {
+                    ShellTask_output("+ENC:NOTI,%d %d %d %d %d %d %d %d %d %d %d\n",
+                                     record.time,
+                                     record.value[0], record.value[1],
+                                     record.value[2], record.value[3],
+                                     record.value[4], record.value[5],
+                                     record.value[6], record.value[7],
+                                     record.value[8], record.value[9]);
+                }
             }
 
-            Trace_printf("%8d %8d %8d %3d %8d %8d %8d %3d",
-                           receivedDataSize, successfullyReceivedPacket, receivedPacket, successfullyReceivedPacket * 100 / receivedPacket,
-                           totalReceivedDataSize, totalSuccessfullyReceivedPacket, totalReceivedPacket, totalSuccessfullyReceivedPacket * 100 / totalReceivedPacket);
-            receivedPacket =  0;
-            receivedDataSize = 0;
-            successfullyReceivedPacket = 0;
+            if ((previous_time / 1000) != (current_time / 1000))
+            {
+#if 0
+                if (encoderEnabled)
+                {
+                    ShellTask_output("+ENC:NOTI,%d\n", Encoder_getCount());
+                }
+#endif
+                Trace_printf("%8d %8d %8d %3d %8d %8d %8d %3d",
+                               receivedDataSize, successfullyReceivedPacket, receivedPacket, successfullyReceivedPacket * 100 / receivedPacket,
+                               totalReceivedDataSize, totalSuccessfullyReceivedPacket, totalReceivedPacket, totalSuccessfullyReceivedPacket * 100 / totalReceivedPacket);
+                receivedPacket =  0;
+                receivedDataSize = 0;
+                successfullyReceivedPacket = 0;
+            }
 
             previous_time = current_time;
         }
 
-        wait_time = Clock_getTicks() % 100000;
+        wait_time = Clock_getTicks() % 10000;
 
         uint32_t events = Event_pend(concentratorEventHandle, 0, CONCENTRATOR_EVENT_ALL, wait_time);
 
@@ -303,7 +323,7 @@ static void ConcentratorTask_packetReceivedCallback(union ConcentratorPacket* pa
     if(packet->header.packetType == RADIO_PACKET_TYPE_RAW_DATA_PACKET)
     {
         /* Save the values */
-        latestRawDataNode.time = (Clock_getTicks() * Clock_tickPeriod) / 1000;
+        latestRawDataNode.time = (Clock_getTicks() / (1000 / Clock_tickPeriod));
         latestRawDataNode.address = packet->header.sourceAddress;
         latestRawDataNode.length = packet->header.length;
         memcpy(latestRawDataNode.data, packet->rawDataPacket.data, latestRawDataNode.length);

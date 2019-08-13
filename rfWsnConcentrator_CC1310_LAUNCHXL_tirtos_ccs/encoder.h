@@ -9,6 +9,20 @@
 #define ENCODER_H_
 
 
+typedef struct
+{
+    uint32_t    time;
+    uint32_t    value[10];
+}   ENCODER_RECORD;
+
+typedef struct
+{
+    uint32_t    head;
+    uint32_t    tail;
+    uint32_t    index;
+    ENCODER_RECORD records[20];
+}   ENCODER;
+
 void    Encoder_init(void);
 
 void    Encoder_start(void);
@@ -19,5 +33,6 @@ uint32_t    Encoder_getCount(void);
 bool        Encoder_isUp(void);
 bool        Encoder_reset(void);
 bool        Encoder_setReverse(bool _reverse);
+bool        Encoder_getRecord(ENCODER_RECORD* record, bool _clear);
 
 #endif /* ENCODER_H_ */
