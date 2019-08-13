@@ -81,6 +81,7 @@
 #include "DataQueue.h"
 #include "Trace.h"
 #include "rf.h"
+#include "encoder.h"
 
 /***** Defines *****/
 #define CONCENTRATOR_TASK_STACK_SIZE 1024
@@ -133,7 +134,6 @@ static struct AdcSensorNode* lastAddedSensorNode = knownSensorNodes;
 static  char buffer[256] = {0,};
 
 static DataQ        dataQ_;
-static  uint32_t    previousReceivedTime = 0;
 
 static  uint32_t    receivedPacket = 0;
 static  uint32_t    receivedDataSize = 0;
@@ -143,6 +143,7 @@ static  uint32_t    totalReceivedPacket = 0;
 static  uint32_t    totalReceivedDataSize = 0;
 static  uint32_t    totalSuccessfullyReceivedPacket = 0;
 
+static  bool        encoderEnabled = false;
 /* Pin driver handle */
 
 /* Clock for sensor stub */
@@ -178,18 +179,44 @@ static void ConcentratorTask_main(UArg arg0, UArg arg1)
 {
     ShellTask_output("+BOOT\n");
 
+    Encoder_init();
+    Encoder_start();
+
     DataQ_init(&dataQ_, 4);
 
     /* Register a packet received callback with the radio task */
     ConcentratorRadioTask_registerPacketReceivedCallback(ConcentratorTask_packetReceivedCallback);
 
+    uint32_t    previous_time = (Clock_getTicks() * Clock_tickPeriod) / 1000;
+
     /* Enter main task loop */
     while(1)
     {
-        uint32_t    currentReceivedTime;
-
+        uint32_t    wait_time;
         /* Wait for event */
-        uint32_t events = Event_pend(concentratorEventHandle, 0, CONCENTRATOR_EVENT_ALL, BIOS_WAIT_FOREVER);
+        uint32_t    current_time = (Clock_getTicks() * Clock_tickPeriod) / 1000;
+
+        if ((previous_time / 1000) != (current_time / 1000))
+        {
+
+            if (encoderEnabled)
+            {
+                ShellTask_output("+ENC:NOTI,%d\n", Encoder_getCount());
+            }
+
+            Trace_printf("%8d %8d %8d %3d %8d %8d %8d %3d",
+                           receivedDataSize, successfullyReceivedPacket, receivedPacket, successfullyReceivedPacket * 100 / receivedPacket,
+                           totalReceivedDataSize, totalSuccessfullyReceivedPacket, totalReceivedPacket, totalSuccessfullyReceivedPacket * 100 / totalReceivedPacket);
+            receivedPacket =  0;
+            receivedDataSize = 0;
+            successfullyReceivedPacket = 0;
+
+            previous_time = current_time;
+        }
+
+        wait_time = Clock_getTicks() % 100000;
+
+        uint32_t events = Event_pend(concentratorEventHandle, 0, CONCENTRATOR_EVENT_ALL, wait_time);
 
         /* If we got a new ADC sensor value */
         if(events & CONCENTRATOR_EVENT_NEW_RAW_DATA)
@@ -266,21 +293,6 @@ static void ConcentratorTask_main(UArg arg0, UArg arg1)
         {
             receivedPacket++;
             totalReceivedPacket++;
-        }
-
-        currentReceivedTime = (Clock_getTicks() * Clock_tickPeriod) / 1000000;
-
-        if (currentReceivedTime != previousReceivedTime)
-        {
-            //clear screen, put cuser to beggining of terminal and print the header
-            Trace_printf("%8d %8d %8d %3d %8d %8d %8d %3d\n",
-                           receivedDataSize, successfullyReceivedPacket, receivedPacket, successfullyReceivedPacket * 100 / receivedPacket,
-                           totalReceivedDataSize, totalSuccessfullyReceivedPacket, totalReceivedPacket, totalSuccessfullyReceivedPacket * 100 / totalReceivedPacket);
-            receivedPacket =  0;
-            receivedDataSize = 0;
-            successfullyReceivedPacket = 0;
-
-            previousReceivedTime = currentReceivedTime;
         }
     }
 }
@@ -445,9 +457,29 @@ bool    ConcentratorTask_commandConfig(int argc, char *argv[])
                     }
                 }
             }
+            else if (strcasecmp(name, "ENC") == 0)
+            {
+                char* value = strtok(NULL, " ");
+                if (value != 0)
+                {
+                    if (strcasecmp(value, "ON") == 0)
+                    {
+                        encoderEnabled = true;
+                    }
+                    else if (strcasecmp(value, "OFF") == 0)
+                    {
+                        encoderEnabled = false;
+                    }
+                    else
+                    {
+                        ShellTask_output("+%s:ERR,Invalid Parameter[%s]\n", argv[0], value);
+                        return  false;
+                    }
+                }
+            }
             else
             {
-                ShellTask_output("+%s:ERR,Invalid Parameter[%s]", argv[0], name);
+                ShellTask_output("+%s:ERR,Invalid Parameter[%s]\n", argv[0], name);
                 return  false;
             }
         }
@@ -487,10 +519,6 @@ bool    ConcentratorTask_commandReset(int argc, char *argv[])
     Watchdog_Handle handle = Watchdog_open(Board_WATCHDOG0, &params);
     Watchdog_setReload(handle, 100);
 
-
-    while ( 1 ) {
-       // Do nothing, just wait for the reset (and never return from here)
-    }
 
 #if 0
     // Disable CPU interrupts
@@ -582,6 +610,26 @@ bool    ConcentratorTask_commandStart(int argc, char *argv[])
                         else
                         {
                             ShellTask_output("+%s:ERR,Invalid Power[%s]\n", argv[0], value);
+                            return  false;
+                        }
+                    }
+                }
+                else if (strcasecmp(name, "ENC") == 0)
+                {
+                    char* value = strtok(NULL, " ");
+                    if (value != 0)
+                    {
+                        if (strcasecmp(value, "ON") == 0)
+                        {
+                            encoderEnabled = true;
+                        }
+                        else if (strcasecmp(value, "OFF") == 0)
+                        {
+                            encoderEnabled = false;
+                        }
+                        else
+                        {
+                            ShellTask_output("+%s:ERR,Invalid Parameter[%s]\n", argv[0], value);
                             return  false;
                         }
                     }
@@ -812,6 +860,75 @@ bool    ConcentratorTask_commandDetect(int argc, char *argv[])
     }
 
     ShellTask_output("+%s:OK\n", argv[0]);
+    return  true;
+}
+
+
+bool    ConcentratorTask_commandEncoder(int argc, char *argv[])
+{
+    if (argc == 1)
+    {
+        Trace_printf("CNT=%d,%s", Encoder_getCount(), (Encoder_isUp()?"UP":"DOWN"));
+    }
+    else
+    {
+        int i;
+
+        for(i = 1 ; i < argc ; i++)
+        {
+            if (strcasecmp(argv[i], "RESET") == 0)
+            {
+                Encoder_reset();
+                ShellTask_output("+%s:OK\n", argv[0]);
+            }
+            else
+            {
+                char* name = strtok(argv[i], "=");
+                if (name != NULL)
+                {
+                    if (strcasecmp(name, "SET") == 0)
+                    {
+                        char* value = strtok(NULL, " ");
+                        if (value != 0)
+                        {
+                            uint32_t    count = strtoul(value, NULL, 10);
+                            Encoder_setCount(count);
+                            ShellTask_output("+%s:OK\n", argv[0]);
+                        }
+                        else
+                        {
+                            ShellTask_output("+%s:ERR\n", argv[0]);
+                        }
+                    }
+                    else if (strcasecmp(name, "REV") == 0)
+                    {
+                        char* value = strtok(NULL, " ");
+                        if (strcasecmp(value, "ON") == 0)
+                        {
+                            Encoder_setReverse(true);
+                        }
+                        else if (strcasecmp(value, "OFF") == 0)
+                        {
+                            Encoder_setReverse(false);
+                        }
+                        else
+                        {
+                            ShellTask_output("+%s:ERR,Invalid REV\n", argv[0]);
+                        }
+                    }
+                    else
+                    {
+                        ShellTask_output("+%s:ERR,Invalid Opt.\n", argv[0]);
+                    }
+                }
+                else
+                {
+                    ShellTask_output("+%s:ERR\n", argv[0]);
+                }
+            }
+        }
+    }
+
     return  true;
 }
 

@@ -304,6 +304,7 @@ void  Trace_printf(char *fmt, ...)
         va_start(va, fmt);
 
         len += vsnprintf(&newFmt[len], sizeof(newFmt) - len, fmt, va);
+        len += snprintf(&newFmt[len], sizeof(newFmt) - len, "\n");
         UART_write(uart, newFmt, len);
 
         va_end(va);

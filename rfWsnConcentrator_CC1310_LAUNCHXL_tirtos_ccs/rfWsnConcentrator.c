@@ -84,7 +84,8 @@ const ShellTaskCommand    commandList_[] =
     {   .name = "scan", .command = ConcentratorTask_commandScan     },
     {   .name = "sleep", .command = ConcentratorTask_commandSleep   },
     {   .name = "stat", .command = ConcentratorTask_commandStatus   },
-    {   .name = "start", .command = ConcentratorTask_commandStart   }
+    {   .name = "start", .command = ConcentratorTask_commandStart   },
+    {   .name = "enc", .command = ConcentratorTask_commandEncoder   }
 };
 
 int main(void)
@@ -93,9 +94,7 @@ int main(void)
     Board_initGeneral();
 
     /* Initialize the UART and SPI for the display driver. */
-    //Display_init();
     UART_init();
-//    SPI_init();
 
     /* Initialize concentrator tasks */
     ConcentratorTask_init();

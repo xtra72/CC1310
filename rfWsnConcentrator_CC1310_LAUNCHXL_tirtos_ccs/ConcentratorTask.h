@@ -61,5 +61,6 @@ bool ConcentratorTask_commandScan(int argc, char *argv[]);
 bool ConcentratorTask_commandSleep(int argc, char *argv[]);
 bool ConcentratorTask_commandDetect(int argc, char *argv[]);
 bool ConcentratorTask_commandReset(int argc, char *argv[]);
+bool ConcentratorTask_commandEncoder(int argc, char *argv[]);
 
 #endif /* TASKS_CONCENTRATORTASK_H_ */

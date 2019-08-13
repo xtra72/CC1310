@@ -175,7 +175,10 @@ bool    ConcentratorRadioTask_setConfig(ConcentratorRadioConfig* config)
 {
     memcpy(&config_, config, sizeof(ConcentratorRadioConfig));
 
-    Event_post(radioOperationEventHandle, RADIO_EVENT_CONFIG);
+    if (run_)
+    {
+        Event_post(radioOperationEventHandle, RADIO_EVENT_CONFIG);
+    }
 
     return  true;
 }
