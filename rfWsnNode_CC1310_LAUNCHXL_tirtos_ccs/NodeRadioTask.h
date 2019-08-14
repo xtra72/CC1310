@@ -61,5 +61,7 @@ uint8_t     nodeRadioTask_getNodeAddr(void);
 uint8_t     nodeRadioTask_setNodeAddr(uint8_t _addr);
 uint32_t    nodeRadioTask_getAckTimeout(void);
 uint32_t    nodeRadioTask_setAckTimeout(uint32_t _ackTimeout);
+bool        NodeRadioTask_rxStop(void);
+bool        NodeRadioTask_rxRun(void);
 
 #endif /* TASKS_NODERADIOTASKTASK_H_ */

@@ -93,7 +93,9 @@
 #define RADIO_EVENT_COMMAND_STOP_MOTION     (uint32_t)(1 << 13)
 #define RADIO_EVENT_COMMAND_SLEEP           (uint32_t)(1 << 14)
 #define RADIO_EVENT_DOWNLINK                (uint32_t)(1 << 15)
-#define RADIO_EVENT_START           (uint32_t)(1 << 16)
+#define RADIO_EVENT_START                   (uint32_t)(1 << 16)
+#define RADIO_EVENT_RX_STOP                 (uint32_t)(1 << 17)
+#define RADIO_EVENT_RX_RUN                  (uint32_t)(1 << 18)
 
 #define NODERADIO_MAX_RETRIES 2
 #define NORERADIO_ACK_TIMEOUT_TIME_MS (160)
@@ -127,6 +129,7 @@ static uint8_t  nodeAddress = 0;
 static  uint32_t    ackTimeout = NORERADIO_ACK_TIMEOUT_TIME_MS;
 static  uint8_t downlinkData[64];
 static  uint8_t downlinkLength = 0;
+static  bool        rx_run_ = false;
 
 static  NodeRadioConfig _config =
 {
@@ -245,9 +248,13 @@ static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
     }
 
     nodeRadioTaskInitialized = true;
+    rx_run_ = true;
+
     /* Enter main task loop */
     while (1)
     {
+        enum NodeRadioOperationStatus status;
+
         /* Wait for an event */
         uint32_t events = Event_pend(radioOperationEventHandle, 0, RADIO_EVENT_ALL, BIOS_WAIT_FOREVER);
 
@@ -290,6 +297,28 @@ static void nodeRadioTaskFunction(UArg arg0, UArg arg1)
         {
             NodeTask_downlink(downlinkData, downlinkLength);
         }
+
+
+        if (events & RADIO_EVENT_RX_STOP)
+        {
+            status = EasyLink_abort();
+            if(status == EasyLink_Status_Success) {
+                Trace_printf("EasyLink async receive stopped.");
+                rx_run_ = false;
+            }
+        }
+        else if (events & RADIO_EVENT_RX_RUN)
+        {
+            /* Go back to RX */
+            status = EasyLink_receiveAsync(ConcentratorRadioTask_rxDoneCallback, 0) ;
+            if(status == EasyLink_Status_Success) {
+                rx_run_ = true;
+            }
+            else {
+                Trace_printf("EasyLink_receiveAsync failed [%d]", status);
+            }
+        }
+
 
         /* If we get an ACK from the concentrator */
         if (events & RADIO_EVENT_DATA_ACK_RECEIVED)
@@ -579,4 +608,26 @@ static void rxDoneCallback(EasyLink_RxPacket * rxPacket, EasyLink_Status status)
          */
         Event_post(radioOperationEventHandle, RADIO_EVENT_ACK_TIMEOUT);
     }
+}
+
+
+bool    NodeRadioTask_rxStop(void)
+{
+    if (rx_run_)
+    {
+        Event_post(radioOperationEventHandle, RADIO_EVENT_RX_STOP);
+    }
+
+    return  true;
+}
+
+
+bool    NodeRadioTask_rxRun(void)
+{
+    if (!rx_run_)
+    {
+        Event_post(radioOperationEventHandle, RADIO_EVENT_RX_RUN);
+    }
+
+    return  true;
 }
