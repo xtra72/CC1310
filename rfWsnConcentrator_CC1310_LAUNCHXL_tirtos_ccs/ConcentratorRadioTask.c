@@ -275,7 +275,6 @@ static void concentratorRadioTask_main(UArg arg0, UArg arg1)
                 Trace_printf("EasyLink_receiveAsync failed [%d]", status);
             }
         }
-
     }
 }
 
@@ -493,3 +492,4 @@ int8_t  ConcentratorRadioTask_getRssi(void)
 {
     return  latestRssi;
 }
+

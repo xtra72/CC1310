@@ -911,9 +911,9 @@ bool    ConcentratorTask_commandEncoder(int argc, char *argv[])
                         char* value = strtok(NULL, " ");
                         if (value != 0)
                         {
-                            uint32_t    count = strtoul(value, NULL, 10);
+                            int32_t    count = strtol(value, NULL, 10);
                             Encoder_setCount(count);
-                            ShellTask_output("+%s:OK\n", argv[0]);
+                            ShellTask_output("+%s:OK,SET=%d\n", argv[0],count);
                         }
                         else
                         {
@@ -934,6 +934,20 @@ bool    ConcentratorTask_commandEncoder(int argc, char *argv[])
                         else
                         {
                             ShellTask_output("+%s:ERR,Invalid REV\n", argv[0]);
+                        }
+                    }
+                    else if (strcasecmp(name, "SCALE") == 0)
+                    {
+                        char* value = strtok(NULL, " ");
+                        if (value != 0)
+                        {
+                            uint32_t    scale = strtoul(value, NULL, 10);
+                            Encoder_setScale(scale);
+                            ShellTask_output("+%s:OK,SCALE=%d\n", argv[0],scale);
+                        }
+                        else
+                        {
+                            ShellTask_output("+%s:ERR\n", argv[0]);
                         }
                     }
                     else

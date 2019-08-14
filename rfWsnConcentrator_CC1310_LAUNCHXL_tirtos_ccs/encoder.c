@@ -21,6 +21,7 @@ int32_t    countA = 0;
 int32_t     offsetA = 0;
 bool        directionUp = true;
 bool        reverse_ = false;
+int32_t     match_ = 10;
 
 PIN_Config GptPinInitTable[] = {
     IOID_22   | PIN_INPUT_EN | PIN_PULLUP,
@@ -40,20 +41,25 @@ void captureCallback(GPTimerCC26XX_Handle handle, GPTimerCC26XX_IntMask interrup
 {
     if ((!reverse_ && (PIN_getInputValue(IOID_22) == PIN_getInputValue(IOID_24))) || (reverse_ && (PIN_getInputValue(IOID_22) != PIN_getInputValue(IOID_24))))
     {
-        countA++;
-        if (countA == 0)
+        if (!directionUp)
         {
-            offsetA = 0;
+            directionUp = true;
         }
-        directionUp = true;
+        else
+        {
+            countA++;
+        }
     }
     else
     {
-        if (countA >= 0)
+        if (directionUp)
+        {
+            directionUp = false;
+        }
+        else
         {
             countA--;
         }
-        directionUp = false;
     }
 }
 
@@ -122,8 +128,8 @@ void    Encoder_init(void)
     pinMux = GPTimerCC26XX_getPinMux(timerChannelA);
     PINCC26XX_setMux(timerPinHandle, PIN_ID(IOID_22), pinMux);
 
-    GPTimerCC26XX_setMatchValue(timerChannelA, 100);
-    GPTimerCC26XX_setLoadValue(timerChannelA, 200);
+    GPTimerCC26XX_setMatchValue(timerChannelA, match_);
+    GPTimerCC26XX_setLoadValue(timerChannelA, match_*2);
 
 
     timerParams.width          = GPT_CONFIG_16BIT;
@@ -143,21 +149,46 @@ void    Encoder_init(void)
     GPTimerCC26XX_registerInterrupt(timerChannelB, timerCallback, GPT_INT_TIMEOUT);
 }
 
-void    Encoder_setCount(uint32_t count)
+void    Encoder_setCount(int32_t count)
 {
-    countA = count / 100;
-    offsetA = GPTimerCC26XX_getValue(timerChannelA) - (count % 100);
+    directionUp = true;
+
+    if(count >= 0)
+    {
+        countA = count / match_;
+        offsetA = GPTimerCC26XX_getValue(timerChannelA) - (count % match_);
+    }
+    else
+    {
+        countA = count / match_;
+        offsetA = - (match_ - GPTimerCC26XX_getValue(timerChannelA)) - (count % match_);
+    }
 }
 
-uint32_t    Encoder_getCount(void)
+int32_t    Encoder_getCount(void)
 {
     if (timerChannelA)
     {
-        if (countA >= 0)
+        if (directionUp)
         {
-            if ((countA * 100) +  GPTimerCC26XX_getValue(timerChannelA) - offsetA > 0)
+            if (countA >= 0)
             {
-                return (countA * 100) +  GPTimerCC26XX_getValue(timerChannelA) - offsetA;
+                return (countA * match_) +  GPTimerCC26XX_getValue(timerChannelA) - offsetA;
+            }
+            else
+            {
+                return (countA * match_) -  (match_ - GPTimerCC26XX_getValue(timerChannelA)) - offsetA;
+            }
+        }
+        else
+        {
+            if (countA >= 0)
+            {
+                return (countA * match_) +  (match_ - GPTimerCC26XX_getValue(timerChannelA)) - offsetA;
+            }
+            else
+            {
+                return (countA * match_) -  GPTimerCC26XX_getValue(timerChannelA) - offsetA;
             }
         }
     }
@@ -199,6 +230,21 @@ bool    Encoder_getRecord(ENCODER_RECORD* record, bool _clear)
     {
         encoder_.tail = (encoder_.tail + 1) % 20;
     }
+
+    return  true;
+}
+
+bool        Encoder_setScale(uint32_t scale)
+{
+    if ((scale == 0) || (2000 < scale))
+    {
+        return  false;
+    }
+
+    match_ = scale;
+
+    GPTimerCC26XX_setMatchValue(timerChannelA, match_);
+    GPTimerCC26XX_setLoadValue(timerChannelA, match_*2);
 
     return  true;
 }
